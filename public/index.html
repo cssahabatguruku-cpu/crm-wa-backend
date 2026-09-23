@@ -3,23 +3,31 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WhatsApp CRM - Barantum Style</title>
+  <title>WhatsApp CRM - Sahabat Guru</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- React & ReactDOM UMD CDN -->
+  <!-- React & ReactDOM 18 UMD -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   
-  <!-- Babel Standalone untuk kompilasi JSX di browser -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
+  <!-- Babel Standalone untuk kompilasi JSX -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.4/babel.min.js"></script>
+
+  <!-- Google Font Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
-    /* Scrollbar minimalis ala CRM modern */
+    * {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    /* Scrollbar elegan dan ramping ala CRM modern */
     ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
+      width: 5px;
+      height: 5px;
     }
     ::-webkit-scrollbar-track {
       background: transparent;
@@ -33,22 +41,53 @@
     }
   </style>
 </head>
-<body class="bg-slate-100 text-slate-800 font-sans antialiased overflow-hidden m-0 p-0">
-  <div id="root"></div>
+<body class="bg-slate-100 text-slate-800 antialiased overflow-hidden m-0 p-0 selection:bg-emerald-500 selection:text-white">
+  <!-- Root Container untuk aplikasi React -->
+  <div id="root">
+    <!-- Tampilan Loading awal sebelum script selesai dikompilasi -->
+    <div id="initial-loader" class="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white gap-4">
+      <div class="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center font-bold text-2xl shadow-xl shadow-emerald-500/20 animate-pulse">
+        WA
+      </div>
+      <div class="text-sm font-medium text-slate-300 flex items-center gap-2">
+        <svg class="w-4 h-4 animate-spin text-emerald-400" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>Memuat WhatsApp CRM Dashboard...</span>
+      </div>
+    </div>
+  </div>
 
   <script type="text/babel">
+    /* Tangkap dan tampilkan pesan kesalahan jika terjadi crash runtime */
+    window.addEventListener('error', function(event) {
+      console.error('Runtime Error:', event.error);
+      const loader = document.getElementById('initial-loader');
+      if (loader) {
+        loader.innerHTML = `
+          <div class="p-6 max-w-md bg-rose-950 border border-rose-800 text-rose-200 rounded-2xl shadow-2xl text-center">
+            <h3 class="font-bold text-lg text-white mb-2">Terjadi Kesalahan</h3>
+            <p class="text-xs mb-4 text-rose-300">${event.message || 'Gagal memuat komponen antarmuka.'}</p>
+            <button onclick="window.location.reload()" class="px-4 py-2 bg-rose-700 hover:bg-rose-600 text-white rounded-lg text-xs font-semibold">
+              Muat Ulang Halaman
+            </button>
+          </div>
+        `;
+      }
+    });
+
     const { useState, useEffect, useRef, useCallback } = React;
 
     const DEFAULT_SUPABASE_URL = 'https://axveczjyamcljxqfnssv.supabase.co';
     const DEFAULT_SUPABASE_ANON_KEY =
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4dmVjemp5YW1jbGp4cWZuc3N2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMzA2NjYsImV4cCI6MjEwNTcwNjY2Nn0.CDW9IxJPQeIWNEoqUv5cM3Uqlr0k9GYVaBOzLtt9G0Q';
     
-    // Gunakan relative path jika sudah satu domain di Vercel, atau fallback ke domain absolut
+    /* Gunakan relative endpoint '/api/send-message' jika sudah satu domain Vercel */
     const DEFAULT_API_URL = window.location.origin.includes('vercel.app')
       ? '/api/send-message'
       : 'https://crm-wa-backend.vercel.app/api/send-message';
 
-    // Komponen Ikon SVG Standar
     const SendIcon = () => (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -126,26 +165,26 @@
       {
         id: 1,
         title: 'Sapaan Pelanggan',
-        text: 'Halo! Terima kasih telah menghubungi kami. Ada yang bisa kami bantu hari ini?'
+        text: 'Halo! Terima kasih telah menghubungi kami di Sahabat Guru. Ada yang bisa kami bantu hari ini?'
       },
       {
         id: 2,
         title: 'Konfirmasi Pembayaran',
-        text: 'Pembayaran Anda telah kami terima dengan baik. Pesanan akan segera diproses. Terima kasih!'
+        text: 'Pembayaran Anda telah kami terima dengan baik. Pesanan dan akses layanan akan segera kami aktifkan. Terima kasih!'
       },
       {
         id: 3,
         title: 'Follow Up Prospek',
-        text: 'Halo kak, apakah ada pertanyaan lebih lanjut terkait penawaran layanan yang kami kirimkan kemarin?'
+        text: 'Halo kak, apakah ada pertanyaan atau informasi tambahan yang dibutuhkan mengenai paket pelatihan Sahabat Guru?'
       },
       {
         id: 4,
-        title: 'Info Jam Operasional',
-        text: 'Halo! Jam operasional CS kami adalah Senin - Sabtu pukul 08.00 - 17.00 WIB. Kami akan membalas segera saat online.'
+        title: 'Jam Operasional CS',
+        text: 'Halo! Jam operasional CS kami adalah Senin - Sabtu pukul 08.00 - 17.00 WIB. Pertanyaan Anda akan kami tanggapi secepatnya.'
       }
     ];
 
-    function App() {
+    function DashboardApp() {
       const [supabaseUrl, setSupabaseUrl] = useState(DEFAULT_SUPABASE_URL);
       const [supabaseAnonKey, setSupabaseAnonKey] = useState(DEFAULT_SUPABASE_ANON_KEY);
       const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL);
@@ -170,7 +209,7 @@
       const [showCrmPanel, setShowCrmPanel] = useState(true);
 
       const [invoiceData, setInvoiceData] = useState({
-        item: 'Paket Berlangganan CRM',
+        item: 'Paket Berlangganan Sahabat Guru',
         amount: '150000',
         account: 'BCA 123-456-7890 a/n Sahabat Guru'
       });
@@ -181,7 +220,7 @@
         setNotification({ msg, type });
         setTimeout(() => {
           setNotification(null);
-        }, 4500);
+        }, 5000);
       };
 
       const fetchContacts = useCallback(async () => {
@@ -193,7 +232,7 @@
             }
           });
 
-          if (!res.ok) throw new Error(`HTTP ${res.status}: Gagal memuat kontak`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}: Gagal memuat data kontak`);
           const data = await res.json();
           setContacts(data || []);
 
@@ -222,7 +261,7 @@
           const data = await res.json();
           setMessages(data || []);
         } catch (err) {
-          console.warn('Gagal memuat pesan:', err.message);
+          console.warn('Gagal memuat riwayat pesan:', err.message);
         }
       }, [supabaseUrl, supabaseAnonKey]);
 
@@ -236,13 +275,13 @@
         }
       }, [selectedContact, fetchMessages]);
 
-      // Polling pesan setiap 4 detik untuk update otomatis pesan masuk
+      /* Polling berkala (3.5 detik) agar pesan WhatsApp masuk otomatis muncul tanpa reload */
       useEffect(() => {
         const timer = setInterval(() => {
           if (selectedContact?.id) {
             fetchMessages(selectedContact.id);
           }
-        }, 4000);
+        }, 3500);
         return () => clearInterval(timer);
       }, [selectedContact, fetchMessages]);
 
@@ -283,10 +322,10 @@
           const result = await response.json();
 
           if (!response.ok) {
-            throw new Error(result.error || 'Gagal mengirim pesan melalui backend API');
+            throw new Error(result.error || 'Gagal mengirim pesan via backend API');
           }
 
-          showNotice('Pesan WhatsApp berhasil terkirim!', 'success');
+          showNotice('Pesan balasan WhatsApp berhasil terkirim!', 'success');
           fetchMessages(selectedContact.id);
         } catch (err) {
           console.error('Send error:', err);
@@ -321,7 +360,7 @@
 
       const handleSendInvoice = () => {
         const formattedAmount = Number(invoiceData.amount).toLocaleString('id-ID');
-        const invoiceMsg = `*INVOICE PEMBAYARAN*\n----------------------------------\nLayanan: *${invoiceData.item}*\nTotal: *Rp ${formattedAmount}*\n\nSilakan transfer ke:\n*${invoiceData.account}*\n----------------------------------\nKirimkan bukti transfer di sini setelah melakukan pembayaran. Terima kasih!`;
+        const invoiceMsg = `*INVOICE PEMBAYARAN*\n----------------------------------\nLayanan: *${invoiceData.item}*\nTotal Tagihan: *Rp ${formattedAmount}*\n\nSilakan transfer ke rekening:\n*${invoiceData.account}*\n----------------------------------\nMohon kirimkan foto bukti transfer di obrolan ini setelah transaksi berhasil. Terima kasih!`;
         setShowInvoiceModal(false);
         handleSendMessage(invoiceMsg);
       };
@@ -335,7 +374,7 @@
 
       return (
         <div className="flex h-screen w-full bg-slate-100 text-slate-800 font-sans antialiased overflow-hidden">
-          {/* Toast Notification Banner */}
+          {/* Banner Notifikasi Terpadu */}
           {notification && (
             <div
               className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-sm font-medium flex items-center gap-2 transition-all ${
@@ -353,7 +392,7 @@
             </div>
           )}
 
-          {/* Mini CRM Left Sidebar */}
+          {/* Kolom 1: Navigasi Kiri / Mini Sidebar */}
           <div className="w-16 bg-slate-900 flex flex-col items-center py-4 justify-between border-r border-slate-800 shrink-0">
             <div className="flex flex-col items-center gap-6">
               <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shadow-lg">
@@ -373,7 +412,7 @@
                 <FileTextIcon />
               </button>
               <button
-                title="Kirim Tagihan"
+                title="Kirim Tagihan (Invoice)"
                 onClick={() => setShowInvoiceModal(true)}
                 className="p-3 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
               >
@@ -392,12 +431,12 @@
             </div>
           </div>
 
-          {/* Contact List Column */}
+          {/* Kolom 2: Daftar Kontak & Pencarian */}
           <div className="w-80 md:w-96 bg-white border-r border-slate-200 flex flex-col shrink-0">
-            {/* Header */}
+            {/* Header Daftar Kontak */}
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h1 className="font-bold text-lg text-slate-900">WhatsApp CRM</h1>
+                <h1 className="font-bold text-lg text-slate-900 leading-tight">WhatsApp CRM</h1>
                 <p className="text-xs text-slate-500">Barantum-Style Dashboard</p>
               </div>
               <button
@@ -414,7 +453,7 @@
               </button>
             </div>
 
-            {/* Search Bar */}
+            {/* Kotak Pencarian Kontak */}
             <div className="p-3 border-b border-slate-100">
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -430,7 +469,7 @@
               </div>
             </div>
 
-            {/* Filter Badges */}
+            {/* Tab Filter Segmentasi */}
             <div className="px-3 py-2 border-b border-slate-100 flex gap-1.5 overflow-x-auto text-xs">
               {['all', 'Hot Lead', 'Pelanggan'].map((tab) => (
                 <button
@@ -447,6 +486,7 @@
               ))}
             </div>
 
+            {/* List Kontak Pelanggan */}
             <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
               {filteredContacts.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 text-sm">
@@ -465,7 +505,7 @@
                         isSelected ? 'bg-emerald-50/80 border-l-4 border-emerald-500' : 'hover:bg-slate-50'
                       }`}
                     >
-                      <div className="w-11 h-11 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-700 shrink-0">
+                      <div className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0">
                         {(contact.name || contact.phone_number || 'U')[0].toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -500,10 +540,11 @@
             </div>
           </div>
 
+          {/* Kolom 3: Ruang Obrolan Percakapan */}
           <div className="flex-1 flex flex-col bg-slate-50 min-w-0">
             {selectedContact ? (
               <>
-                {/* Header Percakapan */}
+                {/* Header Percakapan Aktif */}
                 <div className="h-16 px-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
@@ -545,7 +586,7 @@
                   </div>
                 </div>
 
-                {/* Daftar Gelembung Pesan */}
+                {/* Gelembung Pesan Masuk & Keluar */}
                 <div className="flex-1 p-6 overflow-y-auto space-y-4">
                   <div className="text-center my-2">
                     <span className="px-3 py-1 bg-white border border-slate-200 rounded-full text-[11px] text-slate-500 shadow-sm">
@@ -600,7 +641,7 @@
                   <div ref={chatEndRef} />
                 </div>
 
-                <!-- Input Pengiriman Pesan -->
+                {/* Kolom Input Pengiriman Pesan */}
                 <div className="p-4 bg-white border-t border-slate-200">
                   <form
                     onSubmit={(e) => {
@@ -636,6 +677,7 @@
             )}
           </div>
 
+          {/* Kolom 4: Panel CRM & Segmentasi Kontak Kanan */}
           {showCrmPanel && selectedContact && (
             <div className="w-72 bg-white border-l border-slate-200 p-5 flex flex-col justify-between shrink-0 overflow-y-auto">
               <div>
@@ -698,7 +740,7 @@
                   </div>
                 </div>
 
-                {/* Ringkasan Kontak */}
+                {/* Info Ringkas CRM */}
                 <div className="mt-6 pt-5 border-t border-slate-100 space-y-3 text-xs">
                   <div className="flex justify-between py-1 border-b border-slate-50">
                     <span className="text-slate-400">Total Pesan:</span>
@@ -730,7 +772,7 @@
             </div>
           )}
 
-          {/* Modal Template */}
+          {/* Modal Template Balasan Cepat */}
           {showTemplateModal && (
             <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
@@ -768,7 +810,7 @@
             </div>
           )}
 
-          {/* Modal Invoice Tagihan */}
+          {/* Modal Pembuatan Invoice Tagihan */}
           {showInvoiceModal && (
             <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
@@ -834,7 +876,7 @@
             </div>
           )}
 
-          {/* Modal Pengaturan Kredensial */}
+          {/* Modal Pengaturan Kredensial CRM */}
           {showSettingsModal && (
             <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6">
@@ -901,7 +943,7 @@
 
     const rootElement = document.getElementById('root');
     const root = ReactDOM.createRoot(rootElement);
-    root.render(<App />);
+    root.render(<DashboardApp />);
   </script>
 </body>
 </html>
