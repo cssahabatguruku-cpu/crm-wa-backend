@@ -139,7 +139,7 @@ export default function App() {
     account: 'BCA 123-456-7890 a/n Sahabat Guru'
   });
 
-  const chatEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
 
   const showNotice = (msg, type = 'info') => {
     setNotification({ msg, type });
@@ -147,6 +147,50 @@ export default function App() {
       setNotification(null);
     }, 4500);
   };
+
+  // Handler memilih kontak dengan pushState browser history
+  const handleSelectContact = (contact) => {
+    setSelectedContact(contact);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ page: 'chat', contactId: contact.id }, '');
+    }
+  };
+
+  // Handler tombol kembali (baik tombol UI maupun gesture)
+  const handleBackToContacts = () => {
+    if (typeof window !== 'undefined' && window.history.state?.page === 'chat') {
+      window.history.back();
+    } else {
+      setSelectedContact(null);
+    }
+  };
+
+  // Tangani tombol back fisik/gesture smartphone (Android back / swipe back)
+  useEffect(() => {
+    const handlePopState = (event) => {
+      if (showTemplateModal) {
+        setShowTemplateModal(false);
+        return;
+      }
+      if (showInvoiceModal) {
+        setShowInvoiceModal(false);
+        return;
+      }
+      if (showSettingsModal) {
+        setShowSettingsModal(false);
+        return;
+      }
+      if (showCrmPanel) {
+        setShowCrmPanel(false);
+        return;
+      }
+      // Jika di layar chat, kembali ke daftar kontak
+      setSelectedContact(null);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [showTemplateModal, showInvoiceModal, showSettingsModal, showCrmPanel]);
 
   const fetchContacts = useCallback(async () => {
     try {
@@ -210,8 +254,11 @@ export default function App() {
     return () => clearInterval(timer);
   }, [selectedContact, fetchMessages]);
 
+  // Scroll otomatis hanya pada wadah chat tanpa menggeser header layar
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
   }, [messages]);
 
   const handleSendMessage = async (textToSend) => {
@@ -298,7 +345,7 @@ export default function App() {
   });
 
   return (
-    <div className="flex h-screen w-full bg-slate-100 text-slate-800 font-sans antialiased overflow-hidden">
+    <div className="fixed inset-0 w-full h-[100dvh] bg-slate-100 text-slate-800 font-sans antialiased overflow-hidden flex">
       {/* Toast Notifikasi Melayang */}
       {notification && (
         <div
@@ -356,7 +403,6 @@ export default function App() {
         </div>
       </div>
 
-      {}
       {/* 2. Kolom Daftar Kontak Pelanggan */}
       <div
         className={`${
@@ -444,7 +490,7 @@ export default function App() {
               return (
                 <div
                   key={contact.id}
-                  onClick={() => setSelectedContact(contact)}
+                  onClick={() => handleSelectContact(contact)}
                   className={`p-3.5 flex items-start gap-3 cursor-pointer transition active:bg-slate-100 ${
                     isSelected ? 'bg-emerald-50/80 md:border-l-4 md:border-emerald-500' : 'hover:bg-slate-50'
                   }`}
@@ -509,7 +555,6 @@ export default function App() {
         </div>
       </div>
 
-      {}
       {/* 3. Kolom Ruang Obrolan Percakapan */}
       <div
         className={`${
@@ -518,25 +563,26 @@ export default function App() {
       >
         {selectedContact ? (
           <>
-            {/* Header Ruang Obrolan */}
-            <div className="h-16 px-3 md:px-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-sm z-10">
+            {/* Header Ruang Obrolan (Selalu Tampak & Kokoh di Atas) */}
+            <div className="h-14 sm:h-16 px-3 md:px-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-sm z-20">
               <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                {/* Tombol Kembali (Khusus Layar HP) */}
+                {/* Tombol Kembali Khusus HP */}
                 <button
-                  onClick={() => setSelectedContact(null)}
-                  className="md:hidden p-2 -ml-1 text-slate-600 hover:text-slate-900 rounded-lg active:bg-slate-100"
+                  onClick={handleBackToContacts}
+                  className="md:hidden p-2 -ml-1 text-slate-700 hover:text-slate-900 active:bg-slate-100 rounded-full flex items-center justify-center shrink-0"
                   title="Kembali ke Daftar Kontak"
+                  aria-label="Kembali"
                 >
                   <ArrowLeftIcon />
                 </button>
-                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0">
                   {(selectedContact.name || 'U')[0].toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <h2 className="font-bold text-slate-800 text-xs md:text-sm truncate">
+                  <h2 className="font-bold text-slate-800 text-xs sm:text-sm truncate">
                     {selectedContact.name || selectedContact.phone_number}
                   </h2>
-                  <p className="text-[11px] text-emerald-600 flex items-center gap-1 truncate">
+                  <p className="text-[10px] sm:text-[11px] text-emerald-600 flex items-center gap-1 truncate">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
                     +{selectedContact.phone_number}
                   </p>
@@ -547,7 +593,7 @@ export default function App() {
               <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
                 <button
                   onClick={() => setShowTemplateModal(true)}
-                  className="px-2.5 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg flex items-center gap-1 transition font-medium"
+                  className="px-2 sm:px-2.5 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg flex items-center gap-1 transition font-medium"
                   title="Gunakan Template"
                 >
                   <FileTextIcon />
@@ -555,7 +601,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => setShowInvoiceModal(true)}
-                  className="px-2.5 py-1.5 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg flex items-center gap-1 transition font-medium"
+                  className="px-2 sm:px-2.5 py-1.5 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg flex items-center gap-1 transition font-medium"
                   title="Buat Tagihan"
                 >
                   <CreditCardIcon />
@@ -574,7 +620,10 @@ export default function App() {
             </div>
 
             {/* Gelembung Pesan Masuk & Keluar */}
-            <div className="flex-1 p-3 md:p-6 overflow-y-auto space-y-3 md:space-y-4">
+            <div
+              ref={chatContainerRef}
+              className="flex-1 p-3 md:p-6 overflow-y-auto space-y-3 md:space-y-4"
+            >
               <div className="text-center my-1 md:my-2">
                 <span className="px-3 py-1 bg-white/90 border border-slate-200 rounded-full text-[10px] md:text-[11px] text-slate-500 shadow-sm">
                   Percakapan Terenkripsi WhatsApp Cloud API
@@ -625,7 +674,6 @@ export default function App() {
                   </div>
                 );
               })}
-              <div ref={chatEndRef} />
             </div>
 
             {/* Kolom Pengetikan Balasan Pesan */}
