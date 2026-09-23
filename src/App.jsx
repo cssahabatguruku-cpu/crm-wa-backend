@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import TemplateModal from './components/modals/TemplateModal';
 import BillingModal from './components/modals/BillingModal';
+import ContactModal from './components/modals/ContactModal';
 import {
   SendIcon,
   ArrowLeftIcon,
@@ -38,7 +39,16 @@ export default function App() {
 
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showBillingModal, setShowBillingModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
   const [showCrmPanel, setShowCrmPanel] = useState(false);
+
+  // Status Channel Pengirim Aktif (Nomor Official WhatsApp)
+  const [activeChannel] = useState({
+    name: 'Sahabat Guru (Centang Biru)',
+    number: '+62 823-2272-6989',
+    wabaId: '163200896887310',
+    verified: true,
+  });
 
   const chatContainerRef = useRef(null);
 
@@ -66,12 +76,13 @@ export default function App() {
     const handlePopState = () => {
       if (showTemplateModal) return setShowTemplateModal(false);
       if (showBillingModal) return setShowBillingModal(false);
+      if (showContactModal) return setShowContactModal(false);
       if (showCrmPanel) return setShowCrmPanel(false);
       setSelectedContact(null);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [showTemplateModal, showBillingModal, showCrmPanel]);
+  }, [showTemplateModal, showBillingModal, showContactModal, showCrmPanel]);
 
   const fetchContacts = useCallback(async () => {
     try {
@@ -190,10 +201,17 @@ export default function App() {
       <div className="hidden md:flex w-16 bg-slate-900 flex-col items-center py-4 justify-between border-r border-slate-800 shrink-0">
         <div className="flex flex-col items-center gap-6">
           <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shadow-lg">
-            WA
+            SG
           </div>
           <button title="Kotak Masuk" className="p-3 text-emerald-400 bg-slate-800 rounded-xl">
             <InboxIcon />
+          </button>
+          <button
+            title="Buku Kontak & Tambah Kontak Baru"
+            onClick={() => setShowContactModal(true)}
+            className="p-3 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
+          >
+            <UserIcon />
           </button>
           <button
             title="Template Broadcast Meta (HSM)"
@@ -212,35 +230,48 @@ export default function App() {
         </div>
       </div>
 
-      {}
+      {/* Kolom Daftar Kontak Kiri */}
       <div
         className={
           (selectedContact ? 'hidden md:flex' : 'flex') +
           ' w-full md:w-80 lg:w-96 bg-white border-r border-slate-200 flex-col shrink-0 h-full'
         }
       >
+        {/* Header Kontak dengan Info Akun Official */}
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow">
-              WA
+              SG
             </div>
             <div>
-              <h1 className="font-bold text-base md:text-lg text-slate-900 leading-tight">WhatsApp CRM</h1>
-              <p className="text-[11px] text-slate-500">Sahabat Guru Dashboard</p>
+              <div className="flex items-center gap-1.5">
+                <h1 className="font-bold text-sm md:text-base text-slate-900 leading-tight">Sahabat Guru</h1>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" title="Nomor Official Terhubung"></span>
+              </div>
+              <p className="text-[10px] text-emerald-700 font-medium">{activeChannel.number}</p>
             </div>
           </div>
-          <button
-            onClick={async () => {
-              setIsRefreshing(true);
-              await fetchContacts();
-              if (selectedContact) await fetchMessages(selectedContact.id);
-              setIsRefreshing(false);
-            }}
-            title="Segarkan data"
-            className="p-2 text-slate-500 hover:text-emerald-600 rounded-lg hover:bg-slate-100 transition"
-          >
-            <RefreshCwIcon spinning={isRefreshing} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowContactModal(true)}
+              title="Buku Kontak / Tambah Kontak"
+              className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition text-xs font-semibold flex items-center gap-1"
+            >
+              <span>+ Kontak</span>
+            </button>
+            <button
+              onClick={async () => {
+                setIsRefreshing(true);
+                await fetchContacts();
+                if (selectedContact) await fetchMessages(selectedContact.id);
+                setIsRefreshing(false);
+              }}
+              title="Segarkan data"
+              className="p-2 text-slate-500 hover:text-emerald-600 rounded-lg hover:bg-slate-100 transition"
+            >
+              <RefreshCwIcon spinning={isRefreshing} />
+            </button>
+          </div>
         </div>
 
         {/* Search Bar Input */}
@@ -261,7 +292,7 @@ export default function App() {
 
         {/* Tab Segment Filter */}
         <div className="px-3 py-2 border-b border-slate-100 flex gap-1.5 overflow-x-auto text-xs shrink-0">
-          {['all', 'Hot Lead', 'Pelanggan'].map((tab) => (
+          {['all', 'Hot Lead', 'Pelanggan', 'Alumni Pelatihan'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveFilterTab(tab)}
@@ -275,10 +306,18 @@ export default function App() {
           ))}
         </div>
 
-        {}
+        {/* Daftar Kontak List */}
         <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
           {filteredContacts.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 text-xs md:text-sm">Tidak ada kontak ditemukan.</div>
+            <div className="p-8 text-center text-slate-400 text-xs md:text-sm">
+              <p>Belum ada kontak ditemukan.</p>
+              <button
+                onClick={() => setShowContactModal(true)}
+                className="mt-2 text-xs font-semibold text-emerald-600 hover:underline"
+              >
+                + Tambah Kontak Pertama
+              </button>
+            </div>
           ) : (
             filteredContacts.map((contact) => {
               const isSelected = selectedContact?.id === contact.id;
@@ -330,23 +369,30 @@ export default function App() {
         {/* Mobile Bottom Bar */}
         <div className="md:hidden border-t border-slate-200 bg-white p-2 flex justify-around items-center shrink-0">
           <button
+            onClick={() => setShowContactModal(true)}
+            className="flex flex-col items-center gap-1 py-1 px-3 text-slate-600 hover:text-emerald-600 active:scale-95 transition"
+          >
+            <UserIcon />
+            <span className="text-[10px] font-medium">Buku Kontak</span>
+          </button>
+          <button
             onClick={() => setShowTemplateModal(true)}
-            className="flex flex-col items-center gap-1 py-1 px-4 text-slate-600 hover:text-emerald-600 active:scale-95 transition"
+            className="flex flex-col items-center gap-1 py-1 px-3 text-slate-600 hover:text-emerald-600 active:scale-95 transition"
           >
             <FileTextIcon />
-            <span className="text-[10px] font-medium">Template Meta</span>
+            <span className="text-[10px] font-medium">Template</span>
           </button>
           <button
             onClick={() => setShowBillingModal(true)}
-            className="flex flex-col items-center gap-1 py-1 px-4 text-slate-600 hover:text-emerald-600 active:scale-95 transition"
+            className="flex flex-col items-center gap-1 py-1 px-3 text-slate-600 hover:text-emerald-600 active:scale-95 transition"
           >
             <CreditCardIcon />
-            <span className="text-[10px] font-medium">Saldo & Tagihan</span>
+            <span className="text-[10px] font-medium">Saldo Meta</span>
           </button>
         </div>
       </div>
 
-      {}
+      {/* Kolom Percakapan Chat Kanan */}
       <div
         className={(selectedContact ? 'flex' : 'hidden md:flex') + ' flex-1 flex-col bg-slate-50 min-w-0 h-full relative'}
       >
@@ -384,7 +430,7 @@ export default function App() {
                   title="Buka Template Meta"
                 >
                   <FileTextIcon />
-                  <span className="hidden sm:inline">Template Meta</span>
+                  <span className="hidden sm:inline">Template</span>
                 </button>
 
                 <button
@@ -393,7 +439,7 @@ export default function App() {
                   title="Cek Saldo Akun"
                 >
                   <CreditCardIcon />
-                  <span className="hidden sm:inline">Saldo Akun</span>
+                  <span className="hidden sm:inline">Saldo</span>
                 </button>
 
                 <button
@@ -409,11 +455,11 @@ export default function App() {
               </div>
             </div>
 
-            {}
+            {/* Bubble Messages Flow */}
             <div ref={chatContainerRef} className="flex-1 p-3 md:p-6 overflow-y-auto space-y-3 md:space-y-4">
               <div className="text-center my-1 md:my-2">
                 <span className="px-3 py-1 bg-white/90 border border-slate-200 rounded-full text-[10px] md:text-[11px] text-slate-500 shadow-sm">
-                  Percakapan Terenkripsi WhatsApp Cloud API
+                  Percakapan Terenkripsi • {activeChannel.name}
                 </span>
               </div>
 
@@ -462,7 +508,7 @@ export default function App() {
               })}
             </div>
 
-            {}
+            {/* Chat Input Area */}
             <div className="p-2.5 md:p-4 bg-white border-t border-slate-200 shrink-0">
               <form
                 onSubmit={(e) => {
@@ -497,13 +543,13 @@ export default function App() {
             </div>
             <p className="text-sm font-semibold text-slate-600">Pilih Kontak Pelanggan</p>
             <p className="text-xs text-slate-400 mt-1 max-w-xs">
-              Klik salah satu kontak di sebelah kiri untuk mulai membaca dan membalas pesan.
+              Klik kontak di samping atau gunakan tombol <strong>+ Kontak</strong> untuk memulai percakapan baru.
             </p>
           </div>
         )}
       </div>
 
-      {}
+      {/* CRM Customer Profile Panel */}
       {showCrmPanel && selectedContact && (
         <div className="fixed inset-0 z-40 bg-black/40 flex justify-end md:static md:z-auto md:bg-transparent">
           <div className="w-80 md:w-72 bg-white h-full border-l border-slate-200 p-5 flex flex-col justify-between overflow-y-auto shadow-2xl md:shadow-none">
@@ -528,7 +574,7 @@ export default function App() {
                 <p className="text-xs text-slate-400 mt-0.5">+{selectedContact.phone_number}</p>
               </div>
 
-              {/* Customer Tagging System */}
+              {/* Tagging Pelanggan */}
               <div className="mt-5">
                 <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-2">
                   <TagIcon /> Label Pelanggan
@@ -599,8 +645,8 @@ export default function App() {
                   <span className="font-semibold text-slate-700">{messages.length}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-50">
-                  <span className="text-slate-400">Saluran API:</span>
-                  <span className="font-semibold text-emerald-600">Meta Verified Cloud</span>
+                  <span className="text-slate-400">Nomor Pengirim:</span>
+                  <span className="font-semibold text-emerald-600">{activeChannel.number}</span>
                 </div>
               </div>
             </div>
@@ -620,8 +666,23 @@ export default function App() {
         </div>
       )}
 
-      {}
-      {/* Modal 1: Meta Template Broadcast (HSM) */}
+      {/* Modal 1: Buku Kontak & Tambah Kontak Baru */}
+      <ContactModal
+        isOpen={showContactModal}
+        onClose={() => setShowContactModal(false)}
+        contacts={contacts}
+        onSelectContact={(c) => {
+          handleSelectContact(c);
+        }}
+        onContactCreated={(newC) => {
+          setContacts((prev) => [newC, ...prev]);
+          showNotice('Kontak baru berhasil disimpan ke Supabase!', 'success');
+        }}
+        supabaseUrl={DEFAULT_SUPABASE_URL}
+        supabaseKey={DEFAULT_SUPABASE_ANON_KEY}
+      />
+
+      {/* Modal 2: Meta Template Broadcast (HSM) */}
       <TemplateModal
         isOpen={showTemplateModal}
         onClose={() => setShowTemplateModal(false)}
@@ -630,7 +691,7 @@ export default function App() {
         }}
       />
 
-      {/* Modal 2: Meta WABA Ad Account Balance & Billing */}
+      {/* Modal 3: Meta WABA Ad Account Balance & Billing */}
       <BillingModal isOpen={showBillingModal} onClose={() => setShowBillingModal(false)} />
     </div>
   );
