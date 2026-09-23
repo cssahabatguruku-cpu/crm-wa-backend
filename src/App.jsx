@@ -11,7 +11,6 @@ RefreshCwIcon,
 TagIcon,
 FileTextIcon,
 CreditCardIcon,
-SettingsIcon,
 UserIcon,
 XIcon,
 InboxIcon,
@@ -78,10 +77,11 @@ return () => window.removeEventListener('popstate', handlePopState);
 
 const fetchContacts = useCallback(async () => {
 try {
-const res = await fetch(${DEFAULT_SUPABASE_URL}/rest/v1/contacts?select=*&order=created_at.desc, {
+const url = DEFAULT_SUPABASE_URL + '/rest/v1/contacts?select=*&order=created_at.desc';
+const res = await fetch(url, {
 headers: {
 apikey: DEFAULT_SUPABASE_ANON_KEY,
-Authorization: Bearer ${DEFAULT_SUPABASE_ANON_KEY},
+Authorization: 'Bearer ' + DEFAULT_SUPABASE_ANON_KEY,
 },
 });
 const data = await res.json();
@@ -97,15 +97,13 @@ console.warn('Gagal memuat kontak:', err.message);
 const fetchMessages = useCallback(async (contactId) => {
 if (!contactId) return;
 try {
-const res = await fetch(
-${DEFAULT_SUPABASE_URL}/rest/v1/messages?contact_id=eq.${contactId}&order=created_at.asc,
-{
+const url = DEFAULT_SUPABASE_URL + '/rest/v1/messages?contact_id=eq.' + contactId + '&order=created_at.asc';
+const res = await fetch(url, {
 headers: {
 apikey: DEFAULT_SUPABASE_ANON_KEY,
-Authorization: Bearer ${DEFAULT_SUPABASE_ANON_KEY},
+Authorization: 'Bearer ' + DEFAULT_SUPABASE_ANON_KEY,
 },
-}
-);
+});
 const data = await res.json();
 setMessages(data || []);
 } catch (err) {
@@ -141,7 +139,7 @@ const content = (textToSend || inputText).trim();
 if (!content || !selectedContact) return;
 
 setIsSending(true);
-const tempId = `temp-${Date.now()}`;
+const tempId = 'temp-' + Date.now();
 setMessages((prev) => [
   ...prev,
   { id: tempId, content, direction: 'outbound', status: 'sending', created_at: new Date().toISOString() },
@@ -182,7 +180,8 @@ return (
 {/* Toast Notification */}
 {notification && (
 <div
-className={fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-xs sm:text-sm font-medium flex items-center gap-2 ${ notification.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white' }}
+className={'fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-xs sm:text-sm font-medium flex items-center gap-2 ' +
+(notification.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white')}
 >
 {notification.msg}
 <button onClick={() => setNotification(null)} className="ml-2">
@@ -219,9 +218,7 @@ className={fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-xs sm:t
 
   {/* Daftar Kontak */}
   <div
-    className={`${
-      selectedContact ? 'hidden md:flex' : 'flex'
-    } w-full md:w-80 lg:w-96 bg-white border-r border-slate-200 flex-col shrink-0 h-full`}
+    className={(selectedContact ? 'hidden md:flex' : 'flex') + ' w-full md:w-80 lg:w-96 bg-white border-r border-slate-200 flex-col shrink-0 h-full'}
   >
     <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
       <div className="flex items-center gap-2.5">
@@ -269,11 +266,8 @@ className={fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-xs sm:t
         <button
           key={tab}
           onClick={() => setActiveFilterTab(tab)}
-          className={`px-3 py-1 rounded-full font-medium whitespace-nowrap transition ${
-            activeFilterTab === tab
-              ? 'bg-emerald-600 text-white'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
+          className={'px-3 py-1 rounded-full font-medium whitespace-nowrap transition ' +
+            (activeFilterTab === tab ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}
         >
           {tab === 'all' ? 'Semua Obrolan' : tab}
         </button>
@@ -292,9 +286,8 @@ className={fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-xs sm:t
             <div
               key={contact.id}
               onClick={() => handleSelectContact(contact)}
-              className={`p-3.5 flex items-start gap-3 cursor-pointer transition active:bg-slate-100 ${
-                isSelected ? 'bg-emerald-50/80 md:border-l-4 md:border-emerald-500' : 'hover:bg-slate-50'
-              }`}
+              className={'p-3.5 flex items-start gap-3 cursor-pointer transition active:bg-slate-100 ' +
+                (isSelected ? 'bg-emerald-50/80 md:border-l-4 md:border-emerald-500' : 'hover:bg-slate-50')}
             >
               <div className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
                 {(contact.name || contact.phone_number || 'U')[0].toUpperCase()}
@@ -352,9 +345,7 @@ className={fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-xs sm:t
 
   {/* Ruang Percakapan */}
   <div
-    className={`${
-      selectedContact ? 'flex' : 'hidden md:flex'
-    } flex-1 flex-col bg-slate-50 min-w-0 h-full relative`}
+    className={(selectedContact ? 'flex' : 'hidden md:flex') + ' flex-1 flex-col bg-slate-50 min-w-0 h-full relative'}
   >
     {selectedContact ? (
       <>
@@ -404,9 +395,8 @@ className={fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-xs sm:t
 
             <button
               onClick={() => setShowCrmPanel(!showCrmPanel)}
-              className={`p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition ${
-                showCrmPanel ? 'bg-slate-100 text-emerald-600' : ''
-              }`}
+              className={'p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition ' +
+                (showCrmPanel ? 'bg-slate-100 text-emerald-600' : '')}
               title="Info Profil Pelanggan"
             >
               <UserIcon />
@@ -425,19 +415,17 @@ className={fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-xs sm:t
           {messages.map((msg) => {
             const isOutbound = msg.direction === 'outbound';
             return (
-              <div key={msg.id} className={`flex ${isOutbound ? 'justify-end' : 'justify-start'}`}>
+              <div key={msg.id} className={'flex ' + (isOutbound ? 'justify-end' : 'justify-start')}>
                 <div
-                  className={`max-w-[85%] md:max-w-[70%] rounded-2xl px-3.5 py-2 md:px-4 md:py-2.5 shadow-sm text-xs md:text-sm relative leading-relaxed ${
-                    isOutbound
+                  className={'max-w-[85%] md:max-w-[70%] rounded-2xl px-3.5 py-2 md:px-4 md:py-2.5 shadow-sm text-xs md:text-sm relative leading-relaxed ' +
+                    (isOutbound
                       ? 'bg-emerald-600 text-white rounded-br-none'
-                      : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none'
-                  }`}
+                      : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none')}
                 >
                   <p className="whitespace-pre-line break-words">{msg.content}</p>
                   <div
-                    className={`flex items-center justify-end gap-1.5 mt-1 text-[9px] md:text-[10px] ${
-                      isOutbound ? 'text-emerald-100' : 'text-slate-400'
-                    }`}
+                    className={'flex items-center justify-end gap-1.5 mt-1 text-[9px] md:text-[10px] ' +
+                      (isOutbound ? 'text-emerald-100' : 'text-slate-400')}
                   >
                     <span>
                       {msg.created_at

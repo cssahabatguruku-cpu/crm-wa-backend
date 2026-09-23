@@ -15,7 +15,7 @@ qualityRating: 'GREEN (HIGH)',
 currentTier: 'Tier 2 (10.000 nomor penerima / 24 jam)',
 tierProgress: 2450, // Pesan terkirim dalam 24 jam terakhir
 tierMax: 10000,
-// Tarif resmi Meta untuk Indonesia (est. 2026)
+// Tarif resmi Meta untuk Indonesia
 rates: {
 marketing: 465, // Biaya per percakapan marketing
 utility: 235,   // Biaya per notifikasi resi / konfirmasi bayar
