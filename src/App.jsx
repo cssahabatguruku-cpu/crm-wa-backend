@@ -1,91 +1,26 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import TemplateModal from './components/modals/TemplateModal';
 import BillingModal from './components/modals/BillingModal';
+import {
+SendIcon,
+ArrowLeftIcon,
+CheckIcon,
+CheckCheckIcon,
+SearchIcon,
+RefreshCwIcon,
+TagIcon,
+FileTextIcon,
+CreditCardIcon,
+SettingsIcon,
+UserIcon,
+XIcon,
+InboxIcon,
+} from './components/Icons';
 
 const DEFAULT_SUPABASE_URL = 'https://axveczjyamcljxqfnssv.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY =
 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4dmVjemp5YW1jbGp4cWZuc3N2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMzA2NjYsImV4cCI6MjEwNTcwNjY2Nn0.CDW9IxJPQeIWNEoqUv5cM3Uqlr0k9GYVaBOzLtt9G0Q';
 const DEFAULT_API_URL = '/api/send-message';
-
-// Ikon-ikon mandiri
-const SendIcon = () => (
-
-
-
-);
-
-const ArrowLeftIcon = () => (
-
-
-
-);
-
-const CheckIcon = () => (
-
-
-
-);
-
-const CheckCheckIcon = ({ color = 'text-blue-500' }) => (
-<svg className={w-3.5 h-3.5 ${color} inline} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-
-
-);
-
-const SearchIcon = () => (
-
-
-
-);
-
-const RefreshCwIcon = ({ spinning }) => (
-<svg className={w-4 h-4 ${spinning ? 'animate-spin' : ''}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-
-
-);
-
-const TagIcon = () => (
-
-
-
-);
-
-const FileTextIcon = () => (
-
-
-
-);
-
-const CreditCardIcon = () => (
-
-
-
-);
-
-const SettingsIcon = () => (
-
-
-
-
-);
-
-const UserIcon = () => (
-
-
-
-);
-
-const XIcon = () => (
-
-
-
-);
-
-const InboxIcon = () => (
-
-
-
-);
 
 export default function App() {
 const [contacts, setContacts] = useState([]);
@@ -102,7 +37,7 @@ const [isRefreshing, setIsRefreshing] = useState(false);
 const [isSending, setIsSending] = useState(false);
 const [notification, setNotification] = useState(null);
 
-// Status Modal yang kini aktif
+// Status Modal Interaktif
 const [showTemplateModal, setShowTemplateModal] = useState(false);
 const [showBillingModal, setShowBillingModal] = useState(false);
 const [showCrmPanel, setShowCrmPanel] = useState(false);
@@ -129,7 +64,7 @@ setSelectedContact(null);
 }
 };
 
-// Penanganan tombol back smartphone & gesture
+// Navigasi tombol back smartphone & gesture swipe
 useEffect(() => {
 const handlePopState = () => {
 if (showTemplateModal) return setShowTemplateModal(false);
@@ -146,8 +81,8 @@ try {
 const res = await fetch(${DEFAULT_SUPABASE_URL}/rest/v1/contacts?select=*&order=created_at.desc, {
 headers: {
 apikey: DEFAULT_SUPABASE_ANON_KEY,
-Authorization: Bearer ${DEFAULT_SUPABASE_ANON_KEY}
-}
+Authorization: Bearer ${DEFAULT_SUPABASE_ANON_KEY},
+},
 });
 const data = await res.json();
 setContacts(data || []);
@@ -162,12 +97,15 @@ console.warn('Gagal memuat kontak:', err.message);
 const fetchMessages = useCallback(async (contactId) => {
 if (!contactId) return;
 try {
-const res = await fetch(${DEFAULT_SUPABASE_URL}/rest/v1/messages?contact_id=eq.${contactId}&order=created_at.asc, {
+const res = await fetch(
+${DEFAULT_SUPABASE_URL}/rest/v1/messages?contact_id=eq.${contactId}&order=created_at.asc,
+{
 headers: {
 apikey: DEFAULT_SUPABASE_ANON_KEY,
-Authorization: Bearer ${DEFAULT_SUPABASE_ANON_KEY}
+Authorization: Bearer ${DEFAULT_SUPABASE_ANON_KEY},
+},
 }
-});
+);
 const data = await res.json();
 setMessages(data || []);
 } catch (err) {
@@ -175,12 +113,15 @@ console.warn('Gagal memuat pesan:', err.message);
 }
 }, []);
 
-useEffect(() => { fetchContacts(); }, [fetchContacts]);
+useEffect(() => {
+fetchContacts();
+}, [fetchContacts]);
 
 useEffect(() => {
 if (selectedContact?.id) fetchMessages(selectedContact.id);
 }, [selectedContact, fetchMessages]);
 
+// Polling pesan berkala (3.5 detik)
 useEffect(() => {
 const timer = setInterval(() => {
 if (selectedContact?.id) fetchMessages(selectedContact.id);
@@ -188,6 +129,7 @@ if (selectedContact?.id) fetchMessages(selectedContact.id);
 return () => clearInterval(timer);
 }, [selectedContact, fetchMessages]);
 
+// Scroll otomatis tanpa loncat ke viewport lain
 useEffect(() => {
 if (chatContainerRef.current) {
 chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
@@ -202,7 +144,7 @@ setIsSending(true);
 const tempId = `temp-${Date.now()}`;
 setMessages((prev) => [
   ...prev,
-  { id: tempId, content, direction: 'outbound', status: 'sending', created_at: new Date().toISOString() }
+  { id: tempId, content, direction: 'outbound', status: 'sending', created_at: new Date().toISOString() },
 ]);
 setInputText('');
 
@@ -213,8 +155,8 @@ try {
     body: JSON.stringify({
       phone_number: selectedContact.phone_number,
       contact_id: selectedContact.id,
-      message_text: content
-    })
+      message_text: content,
+    }),
   });
   if (!response.ok) throw new Error('Gagal mengirim via API backend');
   showNotice('Pesan WhatsApp terkirim!', 'success');
@@ -237,21 +179,27 @@ return matchName || matchPhone;
 
 return (
 
-{/* Toast Notifikasi */}
+{/* Toast Notification */}
 {notification && (
-<div className={fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-xs sm:text-sm font-medium flex items-center gap-2 ${ notification.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white' }}>
+<div
+className={fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-xs sm:text-sm font-medium flex items-center gap-2 ${ notification.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white' }}
+>
 {notification.msg}
 <button onClick={() => setNotification(null)} className="ml-2">
 
+
+
 )}
 
-  {/* Navigasi Desktop Kiri (16px) */}
+  {/* Mini Desktop Sidebar */}
   <div className="hidden md:flex w-16 bg-slate-900 flex-col items-center py-4 justify-between border-r border-slate-800 shrink-0">
     <div className="flex flex-col items-center gap-6">
-      <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shadow-lg">WA</div>
-      <button title="Kotak Masuk" className="p-3 text-emerald-400 bg-slate-800 rounded-xl"><InboxIcon /></button>
-      
-      {/* Tombol Template Broadcast Resmi */}
+      <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shadow-lg">
+        WA
+      </div>
+      <button title="Kotak Masuk" className="p-3 text-emerald-400 bg-slate-800 rounded-xl">
+        <InboxIcon />
+      </button>
       <button
         title="Template Broadcast Meta (HSM)"
         onClick={() => setShowTemplateModal(true)}
@@ -259,8 +207,6 @@ return (
       >
         <FileTextIcon />
       </button>
-
-      {/* Tombol Saldo & Tagihan Meta */}
       <button
         title="Saldo & Tagihan Meta WABA"
         onClick={() => setShowBillingModal(true)}
@@ -271,12 +217,17 @@ return (
     </div>
   </div>
 
-  {/* Kolom Daftar Kontak */}
-  <div className={`${selectedContact ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 bg-white border-r border-slate-200 flex-col shrink-0 h-full`}>
-    {/* Header Kontak */}
+  {/* Daftar Kontak */}
+  <div
+    className={`${
+      selectedContact ? 'hidden md:flex' : 'flex'
+    } w-full md:w-80 lg:w-96 bg-white border-r border-slate-200 flex-col shrink-0 h-full`}
+  >
     <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
       <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow">WA</div>
+        <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow">
+          WA
+        </div>
         <div>
           <h1 className="font-bold text-base md:text-lg text-slate-900 leading-tight">WhatsApp CRM</h1>
           <p className="text-[11px] text-slate-500">Sahabat Guru Dashboard</p>
@@ -296,10 +247,12 @@ return (
       </button>
     </div>
 
-    {/* Kolom Cari */}
+    {/* Input Pencarian */}
     <div className="p-3 border-b border-slate-100 shrink-0">
       <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><SearchIcon /></div>
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <SearchIcon />
+        </div>
         <input
           type="text"
           placeholder="Cari nama atau nomor HP..."
@@ -310,14 +263,16 @@ return (
       </div>
     </div>
 
-    {/* Tab Filter */}
+    {/* Tab Segmentasi */}
     <div className="px-3 py-2 border-b border-slate-100 flex gap-1.5 overflow-x-auto text-xs shrink-0">
       {['all', 'Hot Lead', 'Pelanggan'].map((tab) => (
         <button
           key={tab}
           onClick={() => setActiveFilterTab(tab)}
           className={`px-3 py-1 rounded-full font-medium whitespace-nowrap transition ${
-            activeFilterTab === tab ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            activeFilterTab === tab
+              ? 'bg-emerald-600 text-white'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
           }`}
         >
           {tab === 'all' ? 'Semua Obrolan' : tab}
@@ -325,7 +280,7 @@ return (
       ))}
     </div>
 
-    {/* List Kontak */}
+    {/* List Kontak Item */}
     <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
       {filteredContacts.length === 0 ? (
         <div className="p-8 text-center text-slate-400 text-xs md:text-sm">Tidak ada kontak ditemukan.</div>
@@ -346,15 +301,27 @@ return (
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
-                  <h2 className="font-semibold text-sm text-slate-800 truncate">{contact.name || contact.phone_number}</h2>
+                  <h2 className="font-semibold text-sm text-slate-800 truncate">
+                    {contact.name || contact.phone_number}
+                  </h2>
                   <span className="text-[10px] text-slate-400 shrink-0">
-                    {contact.created_at ? new Date(contact.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                    {contact.created_at
+                      ? new Date(contact.created_at).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : ''}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 truncate mt-0.5">+{contact.phone_number}</p>
                 <div className="flex gap-1 mt-1.5 flex-wrap">
                   {tags.map((t, idx) => (
-                    <span key={idx} className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-md">{t}</span>
+                    <span
+                      key={idx}
+                      className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-md"
+                    >
+                      {t}
+                    </span>
                   ))}
                 </div>
               </div>
@@ -364,7 +331,7 @@ return (
       )}
     </div>
 
-    {/* Mobile Bottom Navigation Bar */}
+    {/* Mobile Bottom Bar */}
     <div className="md:hidden border-t border-slate-200 bg-white p-2 flex justify-around items-center shrink-0">
       <button
         onClick={() => setShowTemplateModal(true)}
@@ -383,11 +350,15 @@ return (
     </div>
   </div>
 
-  {/* Kolom Ruang Percakapan */}
-  <div className={`${selectedContact ? 'flex' : 'hidden md:flex'} flex-1 flex-col bg-slate-50 min-w-0 h-full relative`}>
+  {/* Ruang Percakapan */}
+  <div
+    className={`${
+      selectedContact ? 'flex' : 'hidden md:flex'
+    } flex-1 flex-col bg-slate-50 min-w-0 h-full relative`}
+  >
     {selectedContact ? (
       <>
-        {/* Header Percakapan */}
+        {/* Header Obrolan */}
         <div className="h-14 sm:h-16 px-3 md:px-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-sm z-20">
           <div className="flex items-center gap-2 md:gap-3 min-w-0">
             <button
@@ -411,7 +382,7 @@ return (
             </div>
           </div>
 
-          {/* Tombol Header Obrolan */}
+          {/* Tombol Aksi Header */}
           <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
             <button
               onClick={() => setShowTemplateModal(true)}
@@ -433,7 +404,9 @@ return (
 
             <button
               onClick={() => setShowCrmPanel(!showCrmPanel)}
-              className={`p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition ${showCrmPanel ? 'bg-slate-100 text-emerald-600' : ''}`}
+              className={`p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition ${
+                showCrmPanel ? 'bg-slate-100 text-emerald-600' : ''
+              }`}
               title="Info Profil Pelanggan"
             >
               <UserIcon />
@@ -441,7 +414,7 @@ return (
           </div>
         </div>
 
-        {/* Gelembung Obrolan */}
+        {/* Gelembung Pesan */}
         <div ref={chatContainerRef} className="flex-1 p-3 md:p-6 overflow-y-auto space-y-3 md:space-y-4">
           <div className="text-center my-1 md:my-2">
             <span className="px-3 py-1 bg-white/90 border border-slate-200 rounded-full text-[10px] md:text-[11px] text-slate-500 shadow-sm">
@@ -455,19 +428,34 @@ return (
               <div key={msg.id} className={`flex ${isOutbound ? 'justify-end' : 'justify-start'}`}>
                 <div
                   className={`max-w-[85%] md:max-w-[70%] rounded-2xl px-3.5 py-2 md:px-4 md:py-2.5 shadow-sm text-xs md:text-sm relative leading-relaxed ${
-                    isOutbound ? 'bg-emerald-600 text-white rounded-br-none' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none'
+                    isOutbound
+                      ? 'bg-emerald-600 text-white rounded-br-none'
+                      : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none'
                   }`}
                 >
                   <p className="whitespace-pre-line break-words">{msg.content}</p>
-                  <div className={`flex items-center justify-end gap-1.5 mt-1 text-[9px] md:text-[10px] ${
-                    isOutbound ? 'text-emerald-100' : 'text-slate-400'
-                  }`}>
+                  <div
+                    className={`flex items-center justify-end gap-1.5 mt-1 text-[9px] md:text-[10px] ${
+                      isOutbound ? 'text-emerald-100' : 'text-slate-400'
+                    }`}
+                  >
                     <span>
-                      {msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                      {msg.created_at
+                        ? new Date(msg.created_at).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : ''}
                     </span>
                     {isOutbound && (
                       <span>
-                        {msg.status === 'read' ? <CheckCheckIcon color="text-cyan-200" /> : msg.status === 'delivered' ? <CheckCheckIcon color="text-emerald-200" /> : <CheckIcon />}
+                        {msg.status === 'read' ? (
+                          <CheckCheckIcon color="text-cyan-200" />
+                        ) : msg.status === 'delivered' ? (
+                          <CheckCheckIcon color="text-emerald-200" />
+                        ) : (
+                          <CheckIcon />
+                        )}
                       </span>
                     )}
                   </div>
@@ -477,7 +465,7 @@ return (
           })}
         </div>
 
-        {/* Kolom Input Pengetikan */}
+        {/* Input Pesan */}
         <div className="p-2.5 md:p-4 bg-white border-t border-slate-200 shrink-0">
           <form
             onSubmit={(e) => {
@@ -511,19 +499,24 @@ return (
           <InboxIcon />
         </div>
         <p className="text-sm font-semibold text-slate-600">Pilih Kontak Pelanggan</p>
-        <p className="text-xs text-slate-400 mt-1 max-w-xs">Klik salah satu kontak di sebelah kiri untuk mulai membaca dan membalas pesan.</p>
+        <p className="text-xs text-slate-400 mt-1 max-w-xs">
+          Klik salah satu kontak di sebelah kiri untuk mulai membaca dan membalas pesan.
+        </p>
       </div>
     )}
   </div>
 
-  {/* Laci CRM Samping Kanan (Desktop & HP) */}
+  {/* Laci CRM Samping Kanan */}
   {showCrmPanel && selectedContact && (
     <div className="fixed inset-0 z-40 bg-black/40 flex justify-end md:static md:z-auto md:bg-transparent">
       <div className="w-80 md:w-72 bg-white h-full border-l border-slate-200 p-5 flex flex-col justify-between overflow-y-auto shadow-2xl md:shadow-none">
         <div>
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
             <span className="font-bold text-xs uppercase tracking-wider text-slate-400">Detail Pelanggan</span>
-            <button onClick={() => setShowCrmPanel(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
+            <button
+              onClick={() => setShowCrmPanel(false)}
+              className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+            >
               <XIcon />
             </button>
           </div>
@@ -532,7 +525,9 @@ return (
             <div className="w-16 h-16 rounded-full bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center font-bold text-xl mx-auto mb-2 shadow-inner">
               {(selectedContact.name || 'U')[0].toUpperCase()}
             </div>
-            <h3 className="font-bold text-slate-800 text-sm">{selectedContact.name || selectedContact.phone_number}</h3>
+            <h3 className="font-bold text-slate-800 text-sm">
+              {selectedContact.name || selectedContact.phone_number}
+            </h3>
             <p className="text-xs text-slate-400 mt-0.5">+{selectedContact.phone_number}</p>
           </div>
 
@@ -543,12 +538,18 @@ return (
             </span>
             <div className="flex flex-wrap gap-1.5 mb-3">
               {(contactTags[selectedContact.id] || ['Hot Lead', 'Pelanggan']).map((tag, idx) => (
-                <span key={idx} className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-xs font-medium rounded-full flex items-center gap-1 border border-emerald-200">
+                <span
+                  key={idx}
+                  className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-xs font-medium rounded-full flex items-center gap-1 border border-emerald-200"
+                >
                   {tag}
                   <button
                     onClick={() => {
                       const cid = selectedContact.id;
-                      setContactTags({ ...contactTags, [cid]: (contactTags[cid] || []).filter((t) => t !== tag) });
+                      setContactTags({
+                        ...contactTags,
+                        [cid]: (contactTags[cid] || []).filter((t) => t !== tag),
+                      });
                     }}
                     className="hover:text-rose-600"
                   >
@@ -569,7 +570,9 @@ return (
                     if (!newTagInput.trim()) return;
                     const cid = selectedContact.id;
                     const cur = contactTags[cid] || ['Pelanggan'];
-                    if (!cur.includes(newTagInput.trim())) setContactTags({ ...contactTags, [cid]: [...cur, newTagInput.trim()] });
+                    if (!cur.includes(newTagInput.trim())) {
+                      setContactTags({ ...contactTags, [cid]: [...cur, newTagInput.trim()] });
+                    }
                     setNewTagInput('');
                   }
                 }}
@@ -580,7 +583,9 @@ return (
                   if (!newTagInput.trim()) return;
                   const cid = selectedContact.id;
                   const cur = contactTags[cid] || ['Pelanggan'];
-                  if (!cur.includes(newTagInput.trim())) setContactTags({ ...contactTags, [cid]: [...cur, newTagInput.trim()] });
+                  if (!cur.includes(newTagInput.trim())) {
+                    setContactTags({ ...contactTags, [cid]: [...cur, newTagInput.trim()] });
+                  }
                   setNewTagInput('');
                 }}
                 className="px-3 py-1.5 bg-slate-800 text-white rounded-lg text-xs"
@@ -628,10 +633,7 @@ return (
   />
 
   {/* Modal 2: Saldo & Tagihan Akun Iklan Meta WABA */}
-  <BillingModal
-    isOpen={showBillingModal}
-    onClose={() => setShowBillingModal(false)}
-  />
+  <BillingModal isOpen={showBillingModal} onClose={() => setShowBillingModal(false)} />
 </div>
 
 
