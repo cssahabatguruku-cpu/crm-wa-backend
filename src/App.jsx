@@ -36,7 +36,6 @@ const [isRefreshing, setIsRefreshing] = useState(false);
 const [isSending, setIsSending] = useState(false);
 const [notification, setNotification] = useState(null);
 
-// Status Modal Interaktif
 const [showTemplateModal, setShowTemplateModal] = useState(false);
 const [showBillingModal, setShowBillingModal] = useState(false);
 const [showCrmPanel, setShowCrmPanel] = useState(false);
@@ -63,7 +62,6 @@ setSelectedContact(null);
 }
 };
 
-// Navigasi tombol back smartphone & gesture swipe
 useEffect(() => {
 const handlePopState = () => {
 if (showTemplateModal) return setShowTemplateModal(false);
@@ -119,7 +117,6 @@ useEffect(() => {
 if (selectedContact?.id) fetchMessages(selectedContact.id);
 }, [selectedContact, fetchMessages]);
 
-// Polling pesan berkala (3.5 detik)
 useEffect(() => {
 const timer = setInterval(() => {
 if (selectedContact?.id) fetchMessages(selectedContact.id);
@@ -127,7 +124,6 @@ if (selectedContact?.id) fetchMessages(selectedContact.id);
 return () => clearInterval(timer);
 }, [selectedContact, fetchMessages]);
 
-// Scroll otomatis tanpa loncat ke viewport lain
 useEffect(() => {
 if (chatContainerRef.current) {
 chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
