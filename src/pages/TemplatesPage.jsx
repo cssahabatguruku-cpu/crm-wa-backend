@@ -13,7 +13,6 @@ const CONTACT_FIELDS_OPTIONS = [
   { label: 'Alamat Email (email)', value: 'email', sample: 'ahmad@example.com' },
   { label: 'Kategori / Label (label)', value: 'label', sample: 'Guru' },
   { label: 'Catatan CS (notes)', value: 'notes', sample: 'Siswa Aktif' },
-  // Custom field contoh yang sering digunakan
   { label: 'Custom: Kota (custom_fields.kota)', value: 'custom.kota', sample: 'Kudus' },
   { label: 'Custom: Nominal (custom_fields.nominal)', value: 'custom.nominal', sample: 'Rp 150.000' },
   { label: 'Custom: Kode Voucher (custom_fields.voucher)', value: 'custom.voucher', sample: 'PROMO2026' },
@@ -33,7 +32,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
   // States Modal Ajukan Template Baru
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTmplName, setNewTmplName] = useState('');
-  const [newTmplCategory, setNewTmplCategory] = useState('MARKETING');
+  const [newTmplCategory, setNewTmplCategory] = useState('UTILITY');
   const [newTmplLanguage, setNewTmplLanguage] = useState('id');
   const [newTmplBody, setNewTmplBody] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -87,7 +86,6 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
       const initialMap = {};
 
       matches.forEach((placeholder, idx) => {
-        // Default mapping: {{1}} -> name, {{2}} -> institution, dst.
         if (idx === 0) initialMap[placeholder] = 'name';
         else if (idx === 1) initialMap[placeholder] = 'institution';
         else if (idx === 2) initialMap[placeholder] = 'email';
@@ -117,7 +115,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
     return rendered;
   };
 
-  // 4. Ajukan Template Baru ke Meta Graph API
+  // 4. Ajukan Template Baru ke Meta Graph API (PERBAIKAN PARAMETER EXAMPLE)
   const handleCreateTemplate = async (e) => {
     e.preventDefault();
     if (!newTmplName.trim() || !newTmplBody.trim()) return;
@@ -125,19 +123,33 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
     setIsSubmitting(true);
     const formattedName = newTmplName
       .toLowerCase()
+      .trim()
       .replace(/\s+/g, '_')
       .replace(/[^a-z0-9_]/g, '');
+
+    // Deteksi variabel {{1}}, {{2}}, dst. di isi pesan
+    const matches = newTmplBody.match(/\{\{\d+\}\}/g) || [];
+
+    const bodyComponent = {
+      type: 'BODY',
+      text: newTmplBody.trim(),
+    };
+
+    // Jika template memiliki variabel, Meta WAJIB meminta parameter 'example'
+    if (matches.length > 0) {
+      const sampleValues = matches.map((_, idx) =>
+        idx === 0 ? 'Ahmad' : idx === 1 ? 'Acara Webinar' : `Nilai ${idx + 1}`
+      );
+      bodyComponent.example = {
+        body_text: [sampleValues], // Array 2D contoh nilai variabel untuk Meta Reviewer
+      };
+    }
 
     const payload = {
       name: formattedName,
       category: newTmplCategory,
       language: newTmplLanguage,
-      components: [
-        {
-          type: 'BODY',
-          text: newTmplBody.trim(),
-        },
-      ],
+      components: [bodyComponent],
     };
 
     try {
@@ -156,10 +168,10 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
       const resData = await response.json();
 
       if (resData.error) {
-        throw new Error(resData.error.message);
+        throw new Error(resData.error.message || 'Gagal mengajukan template');
       }
 
-      alert(`Berhasil! Template "${formattedName}" telah diajukan ke Meta (ID: ${resData.id}).`);
+      alert(`Berhasil! Template "${formattedName}" telah terkirim ke Meta (ID: ${resData.id}).`);
       setNewTmplName('');
       setNewTmplBody('');
       setShowCreateModal(false);
@@ -319,7 +331,6 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
 
           {selectedTemplate ? (
             <>
-              {/* Dynamic Variable Mapping Selectors */}
               {Object.keys(mappings).length > 0 ? (
                 <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
                   <span className="text-[11px] font-bold text-slate-600 uppercase block">
@@ -413,7 +424,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
                 <input
                   type="text"
                   required
-                  placeholder="contoh: promo_tahun_baru_2026"
+                  placeholder="contoh: undangan_webinar_guru"
                   value={newTmplName}
                   onChange={(e) => setNewTmplName(e.target.value)}
                   className="w-full border border-slate-300 rounded-lg p-2 text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
@@ -430,8 +441,8 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
                     onChange={(e) => setNewTmplCategory(e.target.value)}
                     className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   >
-                    <option value="MARKETING">MARKETING</option>
                     <option value="UTILITY">UTILITY</option>
+                    <option value="MARKETING">MARKETING</option>
                   </select>
                 </div>
                 <div>
@@ -456,7 +467,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
                 <textarea
                   required
                   rows="4"
-                  placeholder="Halo Bapak/Ibu {{1}}, terima kasih telah mendaftar di {{2}}..."
+                  placeholder="Selamat pagi pak {{1}}, izin mengirimkan undangan untuk {{2}}"
                   value={newTmplBody}
                   onChange={(e) => setNewTmplBody(e.target.value)}
                   className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none leading-relaxed"
@@ -476,7 +487,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
                   disabled={isSubmitting}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold"
                 >
-                  {isSubmitting ? 'Mengirim ke Meta...' : 'Kirim Pengajuan'}
+                  {isSubmitting ? 'Mengirim ke Meta...' : 'Mengirim ke Meta...'}
                 </button>
               </div>
             </form>
