@@ -13,6 +13,15 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
   const [selectedContactIds, setSelectedContactIds] = useState([]);
   const [isImporting, setIsImporting] = useState(false);
 
+  // States untuk Edit Kontak
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingContact, setEditingContact] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editLabel, setEditLabel] = useState('General');
+  const [editInstitution, setEditInstitution] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+
   // 1. Fetch Data Kontak dari Supabase
   const fetchContacts = async () => {
     setLoading(true);
@@ -37,14 +46,14 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
     }
   }, [selectedTag, supabaseUrl, supabaseKey]);
 
-  // Sanitasi nomor HP agar formatnya 628xxx
+  // Sanitasi nomor HP
   const sanitizePhone = (phone) => {
     let clean = String(phone || '').replace(/[^0-9]/g, '');
     if (clean.startsWith('0')) clean = '62' + clean.slice(1);
     return clean;
   };
 
-  // 2. Unduh Template Excel Contoh
+  // 2. Unduh Template Excel
   const handleDownloadTemplate = () => {
     const templateData = [
       {
@@ -69,7 +78,7 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
     XLSX.writeFile(workbook, 'Template_Import_Kontak_CRM.xlsx');
   };
 
-  // 3. Handle Import File Excel / CSV
+  // 3. Handle Import Excel / CSV
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -96,11 +105,9 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
       reader.readAsBinaryString(file);
     }
 
-    // Reset value agar bisa upload ulang file yang sama jika diperlukan
     e.target.value = null;
   };
 
-  // 4. Simpan / Upsert Data ke Supabase (Kolom: phone_number)
   const processAndSaveImport = async (rawData) => {
     const formattedData = rawData
       .map((row) => {
@@ -143,6 +150,57 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
     setIsImporting(false);
   };
 
+  // 4. Hapus Kontak
+  const handleDeleteContact = async (id, name) => {
+    if (!confirm(`Hapus kontak "${name}"?`)) return;
+
+    const { error } = await supabase.from('contacts').delete().eq('id', id);
+    if (error) {
+      alert('Gagal menghapus kontak: ' + error.message);
+    } else {
+      setContacts((prev) => prev.filter((c) => c.id !== id));
+      setSelectedContactIds((prev) => prev.filter((item) => item !== id));
+    }
+  };
+
+  // 5. Buka Modal Edit Kontak
+  const handleOpenEditModal = (contact) => {
+    setEditingContact(contact);
+    setEditName(contact.name || '');
+    setEditPhone(contact.phone_number || '');
+    setEditLabel(contact.label || 'General');
+    setEditInstitution(contact.institution || '');
+    setShowEditModal(true);
+  };
+
+  // 6. Simpan Perubahan Edit Kontak
+  const handleUpdateContact = async (e) => {
+    e.preventDefault();
+    if (!editingContact) return;
+
+    setIsUpdating(true);
+    const cleanPhone = sanitizePhone(editPhone);
+
+    const { error } = await supabase
+      .from('contacts')
+      .update({
+        name: editName.trim(),
+        phone_number: cleanPhone,
+        label: editLabel,
+        institution: editInstitution.trim(),
+      })
+      .eq('id', editingContact.id);
+
+    if (error) {
+      alert('Gagal mengupdate kontak: ' + error.message);
+    } else {
+      setShowEditModal(false);
+      setEditingContact(null);
+      fetchContacts();
+    }
+    setIsUpdating(false);
+  };
+
   // Selection Checkbox Logic
   const toggleSelectAll = () => {
     if (selectedContactIds.length === filteredContacts.length) {
@@ -158,7 +216,7 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
     );
   };
 
-  // Filtering Lokal (Search Nama, Nomor, Instansi)
+  // Filtering Lokal
   const filteredContacts = contacts.filter(
     (c) =>
       (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -178,7 +236,6 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Tombol Unduh Template */}
           <button
             onClick={handleDownloadTemplate}
             className="flex items-center gap-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 px-3.5 py-2 rounded-lg font-medium text-sm transition border border-slate-300"
@@ -187,7 +244,6 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
             <span>📥 Template Excel</span>
           </button>
 
-          {/* Tombol Import Excel */}
           <label className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg cursor-pointer font-medium text-sm transition shadow-sm">
             <span>{isImporting ? 'Mengimpor...' : '📂 Import Excel / CSV'}</span>
             <input
@@ -233,10 +289,10 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
           <button
             onClick={() =>
               alert(
-                `Fitur tambah ${selectedContactIds.length} kontak ke paket broadcast akan dihubungkan di halaman BroadcastListsPage`
+                `Fitur tambah ${selectedContactIds.length} kontak ke paket broadcast dapat dikelola di menu Broadcast`
               )
             }
-            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-lg"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium"
           >
             + Masukkan ke Paket Broadcast
           </button>
@@ -301,14 +357,31 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
                   </td>
                   <td className="p-4 text-slate-500">{contact.institution || '-'}</td>
                   <td className="p-4 text-center">
-                    <button
-                      onClick={() =>
-                        onSelectContact && onSelectContact(contact.phone_number)
-                      }
-                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs px-3 py-1.5 rounded-lg border border-emerald-200 font-medium"
-                    >
-                      💬 Buka Chat
-                    </button>
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        onClick={() =>
+                          onSelectContact && onSelectContact(contact.phone_number)
+                        }
+                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs px-2.5 py-1.5 rounded-lg border border-emerald-200 font-medium"
+                        title="Buka Chat"
+                      >
+                        💬 Chat
+                      </button>
+                      <button
+                        onClick={() => handleOpenEditModal(contact)}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-2 py-1.5 rounded-lg border border-slate-200 font-medium"
+                        title="Edit Kontak"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteContact(contact.id, contact.name)}
+                        className="bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs px-2 py-1.5 rounded-lg border border-rose-200 font-medium"
+                        title="Hapus Kontak"
+                      >
+                        🗑️ Hapus
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -316,6 +389,88 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
           </tbody>
         </table>
       </div>
+
+      {/* Modal Edit Kontak */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-5 shadow-2xl">
+            <h3 className="font-bold text-slate-800 text-base mb-4">Edit Data Kontak</h3>
+            <form onSubmit={handleUpdateContact} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Nama Pelanggan *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Nomor WhatsApp *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Kategori / Label
+                </label>
+                <select
+                  value={editLabel}
+                  onChange={(e) => setEditLabel(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                >
+                  <option value="General">General</option>
+                  <option value="Hot Lead">Hot Lead</option>
+                  <option value="Guru">Guru</option>
+                  <option value="Siswa">Siswa</option>
+                  <option value="Alumni">Alumni</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Instansi / Sekolah
+                </label>
+                <input
+                  type="text"
+                  value={editInstitution}
+                  onChange={(e) => setEditInstitution(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdating}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold"
+                >
+                  {isUpdating ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

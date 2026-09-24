@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import TemplateModal from './components/modals/TemplateModal';
 import BillingModal from './components/modals/BillingModal';
 import ContactModal from './components/modals/ContactModal';
@@ -23,6 +24,8 @@ const DEFAULT_SUPABASE_URL = 'https://axveczjyamcljxqfnssv.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4dmVjemp5YW1jbGp4cWZuc3N2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMzA2NjYsImV4cCI6MjEwNTcwNjY2Nn0.CDW9IxJPQeIWNEoqUv5cM3Uqlr0k9GYVaBOzLtt9G0Q';
 const DEFAULT_API_URL = '/api/send-message';
+
+const supabase = createClient(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY);
 
 export default function App() {
   const [currentView, setCurrentView] = useState('chat'); // 'chat' | 'contacts' | 'broadcast'
@@ -60,6 +63,131 @@ export default function App() {
     setTimeout(() => setNotification(null), 4000);
   };
 
+  // 1. Fetch Kontak yang Memiliki Pesan + Detail Pesan Terakhir & Unread Badge
+  const fetchActiveChats = useCallback(async () => {
+    try {
+      // Ambil seluruh kontak
+      const { data: contactsData, error: cErr } = await supabase
+        .from('contacts')
+        .select('*');
+
+      if (cErr) throw cErr;
+
+      // Ambil seluruh pesan untuk agregasi cuplikan chat & unread
+      const { data: messagesData, error: mErr } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (mErr) throw mErr;
+
+      const messageMap = {};
+      const unreadMap = {};
+
+      (messagesData || []).forEach((msg) => {
+        // Simpan pesan paling baru per contact_id
+        if (!messageMap[msg.contact_id]) {
+          messageMap[msg.contact_id] = msg;
+        }
+
+        // Hitung unread count untuk inbound message
+        if (msg.direction === 'inbound' && msg.status !== 'read') {
+          unreadMap[msg.contact_id] = (unreadMap[msg.contact_id] || 0) + 1;
+        }
+      });
+
+      // Filter hanya kontak yang pernah berkirim pesan
+      const activeContacts = (contactsData || [])
+        .filter((c) => messageMap[c.id])
+        .map((c) => ({
+          ...c,
+          last_message: messageMap[c.id]?.content || '',
+          last_message_time: messageMap[c.id]?.created_at || c.created_at,
+          unread_count: unreadMap[c.id] || 0,
+        }))
+        .sort((a, b) => new Date(b.last_message_time) - new Date(a.last_message_time));
+
+      setContacts(activeContacts);
+
+      if (
+        typeof window !== 'undefined' &&
+        window.innerWidth >= 768 &&
+        activeContacts.length > 0 &&
+        !selectedContact
+      ) {
+        setSelectedContact(activeContacts[0]);
+      }
+    } catch (err) {
+      console.warn('Gagal memuat obrolan aktif:', err.message);
+    }
+  }, [selectedContact]);
+
+  // 2. Fetch Pesan untuk Kontak yang Sedang Dipilih & Tandai Sebagai Dibaca (Read)
+  const fetchMessages = useCallback(
+    async (contactId) => {
+      if (!contactId) return;
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('contact_id', contactId)
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        setMessages(data || []);
+
+        // Update status pesan inbound menjadi 'read'
+        await supabase
+          .from('messages')
+          .update({ status: 'read' })
+          .eq('contact_id', contactId)
+          .eq('direction', 'inbound')
+          .neq('status', 'read');
+
+        // Hapus unread badge pada state lokal
+        setContacts((prev) =>
+          prev.map((c) => (c.id === contactId ? { ...c, unread_count: 0 } : c))
+        );
+      } catch (err) {
+        console.warn('Gagal memuat pesan:', err.message);
+      }
+    },
+    []
+  );
+
+  // 3. Supabase Realtime Subscription (Terima Pesan Masuk Secara Instan Tanpa Reload)
+  useEffect(() => {
+    fetchActiveChats();
+
+    const channel = supabase
+      .channel('public:messages')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          fetchActiveChats();
+          if (selectedContact?.id === payload.new.contact_id) {
+            setMessages((prev) => [...prev, payload.new]);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchActiveChats, selectedContact]);
+
+  useEffect(() => {
+    if (selectedContact?.id) fetchMessages(selectedContact.id);
+  }, [selectedContact, fetchMessages]);
+
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [messages]);
+
   const handleSelectContact = (contact) => {
     setSelectedContact(contact);
     if (typeof window !== 'undefined') {
@@ -75,75 +203,6 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    const handlePopState = () => {
-      if (showTemplateModal) return setShowTemplateModal(false);
-      if (showBillingModal) return setShowBillingModal(false);
-      if (showContactModal) return setShowContactModal(false);
-      if (showCrmPanel) return setShowCrmPanel(false);
-      setSelectedContact(null);
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [showTemplateModal, showBillingModal, showContactModal, showCrmPanel]);
-
-  const fetchContacts = useCallback(async () => {
-    try {
-      const url = DEFAULT_SUPABASE_URL + '/rest/v1/contacts?select=*&order=created_at.desc';
-      const res = await fetch(url, {
-        headers: {
-          apikey: DEFAULT_SUPABASE_ANON_KEY,
-          Authorization: 'Bearer ' + DEFAULT_SUPABASE_ANON_KEY,
-        },
-      });
-      const data = await res.json();
-      setContacts(data || []);
-      if (typeof window !== 'undefined' && window.innerWidth >= 768 && data?.length > 0 && !selectedContact) {
-        setSelectedContact(data[0]);
-      }
-    } catch (err) {
-      console.warn('Gagal memuat kontak:', err.message);
-    }
-  }, [selectedContact]);
-
-  const fetchMessages = useCallback(async (contactId) => {
-    if (!contactId) return;
-    try {
-      const url = DEFAULT_SUPABASE_URL + '/rest/v1/messages?contact_id=eq.' + contactId + '&order=created_at.asc';
-      const res = await fetch(url, {
-        headers: {
-          apikey: DEFAULT_SUPABASE_ANON_KEY,
-          Authorization: 'Bearer ' + DEFAULT_SUPABASE_ANON_KEY,
-        },
-      });
-      const data = await res.json();
-      setMessages(data || []);
-    } catch (err) {
-      console.warn('Gagal memuat pesan:', err.message);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchContacts();
-  }, [fetchContacts]);
-
-  useEffect(() => {
-    if (selectedContact?.id) fetchMessages(selectedContact.id);
-  }, [selectedContact, fetchMessages]);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (selectedContact?.id) fetchMessages(selectedContact.id);
-    }, 3500);
-    return () => clearInterval(timer);
-  }, [selectedContact, fetchMessages]);
-
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [messages]);
-
   const handleSendMessage = async (textToSend) => {
     const content = (textToSend || inputText).trim();
     if (!content || !selectedContact) return;
@@ -152,7 +211,13 @@ export default function App() {
     const tempId = 'temp-' + Date.now();
     setMessages((prev) => [
       ...prev,
-      { id: tempId, content, direction: 'outbound', status: 'sending', created_at: new Date().toISOString() },
+      {
+        id: tempId,
+        content,
+        direction: 'outbound',
+        status: 'sending',
+        created_at: new Date().toISOString(),
+      },
     ]);
     setInputText('');
 
@@ -169,6 +234,7 @@ export default function App() {
       if (!response.ok) throw new Error('Gagal mengirim via API backend');
       showNotice('Pesan WhatsApp terkirim!', 'success');
       fetchMessages(selectedContact.id);
+      fetchActiveChats();
     } catch (err) {
       showNotice(err.message, 'error');
     } finally {
@@ -190,7 +256,9 @@ export default function App() {
         <div
           className={
             'fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl text-xs sm:text-sm font-medium flex items-center gap-2 ' +
-            (notification.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white')
+            (notification.type === 'error'
+              ? 'bg-rose-600 text-white'
+              : 'bg-emerald-600 text-white')
           }
         >
           <span>{notification.msg}</span>
@@ -207,7 +275,6 @@ export default function App() {
             SG
           </div>
 
-          {/* 1. Menu Obrolan (Chat) */}
           <button
             title="Kotak Masuk Chat"
             onClick={() => setCurrentView('chat')}
@@ -221,7 +288,6 @@ export default function App() {
             <InboxIcon />
           </button>
 
-          {/* 2. Menu Master Data Kontak */}
           <button
             title="Master Data Kontak & Import Excel"
             onClick={() => setCurrentView('contacts')}
@@ -235,7 +301,6 @@ export default function App() {
             <UserIcon />
           </button>
 
-          {/* 3. Menu Paket Broadcast Massal */}
           <button
             title="Paket & List Broadcast"
             onClick={() => setCurrentView('broadcast')}
@@ -249,7 +314,6 @@ export default function App() {
             📢
           </button>
 
-          {/* 4. Menu Template Meta */}
           <button
             title="Template Broadcast Meta (HSM)"
             onClick={() => setShowTemplateModal(true)}
@@ -258,7 +322,6 @@ export default function App() {
             <FileTextIcon />
           </button>
 
-          {/* 5. Menu Saldo Meta */}
           <button
             title="Saldo & Tagihan Meta WABA"
             onClick={() => setShowBillingModal(true)}
@@ -274,10 +337,15 @@ export default function App() {
         <ContactsPage
           supabaseUrl={DEFAULT_SUPABASE_URL}
           supabaseKey={DEFAULT_SUPABASE_ANON_KEY}
-          onSelectContact={(phoneNumber) => {
-            const found = contacts.find((c) => c.phone_number === phoneNumber);
-            if (found) {
-              setSelectedContact(found);
+          onSelectContact={async (phoneNumber) => {
+            const { data } = await supabase
+              .from('contacts')
+              .select('*')
+              .eq('phone_number', phoneNumber)
+              .single();
+
+            if (data) {
+              setSelectedContact(data);
             } else {
               setSelectedContact({ phone_number: phoneNumber, name: phoneNumber });
             }
@@ -288,10 +356,15 @@ export default function App() {
         <BroadcastListsPage
           supabaseUrl={DEFAULT_SUPABASE_URL}
           supabaseKey={DEFAULT_SUPABASE_ANON_KEY}
-          onSelectContact={(phoneNumber) => {
-            const found = contacts.find((c) => c.phone_number === phoneNumber);
-            if (found) {
-              setSelectedContact(found);
+          onSelectContact={async (phoneNumber) => {
+            const { data } = await supabase
+              .from('contacts')
+              .select('*')
+              .eq('phone_number', phoneNumber)
+              .single();
+
+            if (data) {
+              setSelectedContact(data);
             } else {
               setSelectedContact({ phone_number: phoneNumber, name: phoneNumber });
             }
@@ -300,7 +373,7 @@ export default function App() {
         />
       ) : (
         <>
-          {/* Kolom Daftar Kontak Kiri (Mode Chat Input) */}
+          {/* Kolom Daftar Kontak Kiri (Obrolan Aktif) */}
           <div
             className={
               (selectedContact ? 'hidden md:flex' : 'flex') +
@@ -315,10 +388,17 @@ export default function App() {
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <h1 className="font-bold text-sm md:text-base text-slate-900 leading-tight">Sahabat Guru</h1>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" title="Nomor Official Terhubung"></span>
+                    <h1 className="font-bold text-sm md:text-base text-slate-900 leading-tight">
+                      Sahabat Guru
+                    </h1>
+                    <span
+                      className="w-2 h-2 rounded-full bg-emerald-500"
+                      title="Nomor Official Terhubung"
+                    ></span>
                   </div>
-                  <p className="text-[10px] text-emerald-700 font-medium">{activeChannel.number}</p>
+                  <p className="text-[10px] text-emerald-700 font-medium">
+                    {activeChannel.number}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -332,7 +412,7 @@ export default function App() {
                 <button
                   onClick={async () => {
                     setIsRefreshing(true);
-                    await fetchContacts();
+                    await fetchActiveChats();
                     if (selectedContact) await fetchMessages(selectedContact.id);
                     setIsRefreshing(false);
                   }}
@@ -352,7 +432,7 @@ export default function App() {
                 </div>
                 <input
                   type="text"
-                  placeholder="Cari nama atau nomor HP..."
+                  placeholder="Cari percakapan..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -368,7 +448,9 @@ export default function App() {
                   onClick={() => setActiveFilterTab(tab)}
                   className={
                     'px-3 py-1 rounded-full font-medium whitespace-nowrap transition ' +
-                    (activeFilterTab === tab ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')
+                    (activeFilterTab === tab
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200')
                   }
                 >
                   {tab === 'all' ? 'Semua Obrolan' : tab}
@@ -376,32 +458,33 @@ export default function App() {
               ))}
             </div>
 
-            {/* Daftar Kontak List */}
+            {/* Daftar Kontak dengan Cuplikan Chat & Unread Badge */}
             <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
               {filteredContacts.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 text-xs md:text-sm">
-                  <p>Belum ada kontak ditemukan.</p>
+                  <p>Belum ada percakapan aktif.</p>
                   <button
                     onClick={() => setCurrentView('contacts')}
                     className="mt-2 text-xs font-semibold text-emerald-600 hover:underline"
                   >
-                    + Kelola Master Kontak
+                    + Mulai Obrolan dari Master Kontak
                   </button>
                 </div>
               ) : (
                 filteredContacts.map((contact) => {
                   const isSelected = selectedContact?.id === contact.id;
-                  const tags = contactTags[contact.id] || ['Hot Lead'];
                   return (
                     <div
                       key={contact.id}
                       onClick={() => handleSelectContact(contact)}
                       className={
                         'p-3.5 flex items-start gap-3 cursor-pointer transition active:bg-slate-100 ' +
-                        (isSelected ? 'bg-emerald-50/80 md:border-l-4 md:border-emerald-500' : 'hover:bg-slate-50')
+                        (isSelected
+                          ? 'bg-emerald-50/80 md:border-l-4 md:border-emerald-500'
+                          : 'hover:bg-slate-50')
                       }
                     >
-                      <div className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
+                      <div className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0 shadow-sm relative">
                         {(contact.name || contact.phone_number || 'U')[0].toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -410,26 +493,29 @@ export default function App() {
                             {contact.name || contact.phone_number}
                           </h2>
                           <span className="text-[10px] text-slate-400 shrink-0">
-                            {contact.created_at
-                              ? new Date(contact.created_at).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })
+                            {contact.last_message_time
+                              ? new Date(contact.last_message_time).toLocaleTimeString(
+                                  [],
+                                  {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  }
+                                )
                               : ''}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 truncate mt-0.5">+{contact.phone_number}</p>
-                        <div className="flex gap-1 mt-1.5 flex-wrap">
-                          {tags.map((t, idx) => (
-                            <span
-                              key={idx}
-                              className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-md"
-                            >
-                              {t}
-                            </span>
-                          ))}
-                        </div>
+                        {/* Cuplikan Chat Terakhir */}
+                        <p className="text-xs text-slate-500 truncate mt-0.5">
+                          {contact.last_message || `+${contact.phone_number}`}
+                        </p>
                       </div>
+
+                      {/* Unread Badge */}
+                      {contact.unread_count > 0 && (
+                        <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 shadow-sm">
+                          {contact.unread_count}
+                        </span>
+                      )}
                     </div>
                   );
                 })
@@ -442,7 +528,9 @@ export default function App() {
                 onClick={() => setCurrentView('chat')}
                 className={
                   'flex flex-col items-center gap-1 py-1 px-2 transition ' +
-                  (currentView === 'chat' ? 'text-emerald-600 font-bold' : 'text-slate-600')
+                  (currentView === 'chat'
+                    ? 'text-emerald-600 font-bold'
+                    : 'text-slate-600')
                 }
               >
                 <InboxIcon />
@@ -452,7 +540,9 @@ export default function App() {
                 onClick={() => setCurrentView('contacts')}
                 className={
                   'flex flex-col items-center gap-1 py-1 px-2 transition ' +
-                  (currentView === 'contacts' ? 'text-emerald-600 font-bold' : 'text-slate-600')
+                  (currentView === 'contacts'
+                    ? 'text-emerald-600 font-bold'
+                    : 'text-slate-600')
                 }
               >
                 <UserIcon />
@@ -462,7 +552,9 @@ export default function App() {
                 onClick={() => setCurrentView('broadcast')}
                 className={
                   'flex flex-col items-center gap-1 py-1 px-2 transition ' +
-                  (currentView === 'broadcast' ? 'text-emerald-600 font-bold' : 'text-slate-600')
+                  (currentView === 'broadcast'
+                    ? 'text-emerald-600 font-bold'
+                    : 'text-slate-600')
                 }
               >
                 <span className="text-sm leading-none">📢</span>
@@ -538,7 +630,10 @@ export default function App() {
                 </div>
 
                 {/* Bubble Messages Flow */}
-                <div ref={chatContainerRef} className="flex-1 p-3 md:p-6 overflow-y-auto space-y-3 md:space-y-4">
+                <div
+                  ref={chatContainerRef}
+                  className="flex-1 p-3 md:p-6 overflow-y-auto space-y-3 md:space-y-4"
+                >
                   <div className="text-center my-1 md:my-2">
                     <span className="px-3 py-1 bg-white/90 border border-slate-200 rounded-full text-[10px] md:text-[11px] text-slate-500 shadow-sm">
                       Percakapan Terenkripsi • {activeChannel.name}
@@ -548,7 +643,10 @@ export default function App() {
                   {messages.map((msg) => {
                     const isOutbound = msg.direction === 'outbound';
                     return (
-                      <div key={msg.id} className={'flex ' + (isOutbound ? 'justify-end' : 'justify-start')}>
+                      <div
+                        key={msg.id}
+                        className={'flex ' + (isOutbound ? 'justify-end' : 'justify-start')}
+                      >
                         <div
                           className={
                             'max-w-[85%] md:max-w-[70%] rounded-2xl px-3.5 py-2 md:px-4 md:py-2.5 shadow-sm text-xs md:text-sm relative leading-relaxed ' +
@@ -613,7 +711,9 @@ export default function App() {
                       className="px-4 py-2.5 md:px-5 md:py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl flex items-center justify-center gap-1.5 font-medium text-xs md:text-sm transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                     >
                       <SendIcon />
-                      <span className="hidden sm:inline">{isSending ? 'Mengirim...' : 'Kirim'}</span>
+                      <span className="hidden sm:inline">
+                        {isSending ? 'Mengirim...' : 'Kirim'}
+                      </span>
                     </button>
                   </form>
                 </div>
@@ -625,7 +725,7 @@ export default function App() {
                 </div>
                 <p className="text-sm font-semibold text-slate-600">Pilih Kontak Pelanggan</p>
                 <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                  Klik kontak di samping atau gunakan ikon navigasi di sidebar kiri untuk berpindah ke Master Kontak dan Paket Broadcast.
+                  Klik obrolan di samping atau gunakan menu Kontak di sidebar kiri untuk mengelola master data.
                 </p>
               </div>
             )}
@@ -639,7 +739,9 @@ export default function App() {
           <div className="w-80 md:w-72 bg-white h-full border-l border-slate-200 p-5 flex flex-col justify-between overflow-y-auto shadow-2xl md:shadow-none">
             <div>
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-                <span className="font-bold text-xs uppercase tracking-wider text-slate-400">Detail Pelanggan</span>
+                <span className="font-bold text-xs uppercase tracking-wider text-slate-400">
+                  Detail Pelanggan
+                </span>
                 <button
                   onClick={() => setShowCrmPanel(false)}
                   className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
@@ -664,26 +766,28 @@ export default function App() {
                   <TagIcon /> Label Pelanggan
                 </span>
                 <div className="flex flex-wrap gap-1.5 mb-3">
-                  {(contactTags[selectedContact.id] || ['Hot Lead', 'Pelanggan']).map((tag, idx) => (
-                    <span
-                      key={idx}
-                      className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-xs font-medium rounded-full flex items-center gap-1 border border-emerald-200"
-                    >
-                      {tag}
-                      <button
-                        onClick={() => {
-                          const cid = selectedContact.id;
-                          setContactTags({
-                            ...contactTags,
-                            [cid]: (contactTags[cid] || []).filter((t) => t !== tag),
-                          });
-                        }}
-                        className="hover:text-rose-600"
+                  {(contactTags[selectedContact.id] || ['Hot Lead', 'Pelanggan']).map(
+                    (tag, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-xs font-medium rounded-full flex items-center gap-1 border border-emerald-200"
                       >
-                        <XIcon />
-                      </button>
-                    </span>
-                  ))}
+                        {tag}
+                        <button
+                          onClick={() => {
+                            const cid = selectedContact.id;
+                            setContactTags({
+                              ...contactTags,
+                              [cid]: (contactTags[cid] || []).filter((t) => t !== tag),
+                            });
+                          }}
+                          className="hover:text-rose-600"
+                        >
+                          <XIcon />
+                        </button>
+                      </span>
+                    )
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <input
@@ -698,7 +802,10 @@ export default function App() {
                         const cid = selectedContact.id;
                         const cur = contactTags[cid] || ['Pelanggan'];
                         if (!cur.includes(newTagInput.trim())) {
-                          setContactTags({ ...contactTags, [cid]: [...cur, newTagInput.trim()] });
+                          setContactTags({
+                            ...contactTags,
+                            [cid]: [...cur, newTagInput.trim()],
+                          });
                         }
                         setNewTagInput('');
                       }
@@ -711,7 +818,10 @@ export default function App() {
                       const cid = selectedContact.id;
                       const cur = contactTags[cid] || ['Pelanggan'];
                       if (!cur.includes(newTagInput.trim())) {
-                        setContactTags({ ...contactTags, [cid]: [...cur, newTagInput.trim()] });
+                        setContactTags({
+                          ...contactTags,
+                          [cid]: [...cur, newTagInput.trim()],
+                        });
                       }
                       setNewTagInput('');
                     }}
@@ -730,7 +840,9 @@ export default function App() {
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-50">
                   <span className="text-slate-400">Nomor Pengirim:</span>
-                  <span className="font-semibold text-emerald-600">{activeChannel.number}</span>
+                  <span className="font-semibold text-emerald-600">
+                    {activeChannel.number}
+                  </span>
                 </div>
               </div>
             </div>
@@ -750,13 +862,13 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal 1: Buku Kontak Modal (Legacy Support) */}
+      {/* Modal Buku Kontak Legacy */}
       <ContactModal
         isOpen={showContactModal}
         onClose={() => setShowContactModal(false)}
         contacts={contacts}
         onSelectContact={(c) => {
-          handleSelectContact(c);
+          setSelectedContact(c);
         }}
         onContactCreated={(newC) => {
           setContacts((prev) => [newC, ...prev]);
@@ -766,7 +878,7 @@ export default function App() {
         supabaseKey={DEFAULT_SUPABASE_ANON_KEY}
       />
 
-      {/* Modal 2: Meta Template Broadcast (HSM) */}
+      {/* Modal Template Meta */}
       <TemplateModal
         isOpen={showTemplateModal}
         onClose={() => setShowTemplateModal(false)}
@@ -775,7 +887,7 @@ export default function App() {
         }}
       />
 
-      {/* Modal 3: Meta WABA Ad Account Balance & Billing */}
+      {/* Modal Billing & Saldo */}
       <BillingModal isOpen={showBillingModal} onClose={() => setShowBillingModal(false)} />
     </div>
   );
