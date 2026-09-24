@@ -63,17 +63,15 @@ export default function App() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // 1. Fetch Kontak yang Memiliki Pesan + Detail Pesan Terakhir & Unread Badge
+  // 1. Fetch Kontak yang Memiliki Pesan & Hitung Unread Badge
   const fetchActiveChats = useCallback(async () => {
     try {
-      // Ambil seluruh kontak
       const { data: contactsData, error: cErr } = await supabase
         .from('contacts')
         .select('*');
 
       if (cErr) throw cErr;
 
-      // Ambil seluruh pesan untuk agregasi cuplikan chat & unread
       const { data: messagesData, error: mErr } = await supabase
         .from('messages')
         .select('*')
@@ -85,26 +83,29 @@ export default function App() {
       const unreadMap = {};
 
       (messagesData || []).forEach((msg) => {
-        // Simpan pesan paling baru per contact_id
+        // Cuplikan pesan paling baru per kontak
         if (!messageMap[msg.contact_id]) {
           messageMap[msg.contact_id] = msg;
         }
 
-        // Hitung unread count untuk inbound message
+        // Hitung unread HANYA untuk pesan masuk (inbound) yang statusnya belum 'read'
         if (msg.direction === 'inbound' && msg.status !== 'read') {
           unreadMap[msg.contact_id] = (unreadMap[msg.contact_id] || 0) + 1;
         }
       });
 
-      // Filter hanya kontak yang pernah berkirim pesan
+      // Filter kontak aktif & set unread = 0 jika kontak sedang dibuka
       const activeContacts = (contactsData || [])
         .filter((c) => messageMap[c.id])
-        .map((c) => ({
-          ...c,
-          last_message: messageMap[c.id]?.content || '',
-          last_message_time: messageMap[c.id]?.created_at || c.created_at,
-          unread_count: unreadMap[c.id] || 0,
-        }))
+        .map((c) => {
+          const isCurrentlySelected = selectedContact?.id === c.id;
+          return {
+            ...c,
+            last_message: messageMap[c.id]?.content || '',
+            last_message_time: messageMap[c.id]?.created_at || c.created_at,
+            unread_count: isCurrentlySelected ? 0 : (unreadMap[c.id] || 0),
+          };
+        })
         .sort((a, b) => new Date(b.last_message_time) - new Date(a.last_message_time));
 
       setContacts(activeContacts);
@@ -122,40 +123,50 @@ export default function App() {
     }
   }, [selectedContact]);
 
-  // 2. Fetch Pesan untuk Kontak yang Sedang Dipilih & Tandai Sebagai Dibaca (Read)
-  const fetchMessages = useCallback(
-    async (contactId) => {
-      if (!contactId) return;
-      try {
-        const { data, error } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('contact_id', contactId)
-          .order('created_at', { ascending: true });
+  // 2. Fetch Isi Percakapan
+  const fetchMessages = useCallback(async (contactId) => {
+    if (!contactId) return;
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('contact_id', contactId)
+        .order('created_at', { ascending: true });
 
-        if (error) throw error;
-        setMessages(data || []);
+      if (error) throw error;
+      setMessages(data || []);
+    } catch (err) {
+      console.warn('Gagal memuat pesan:', err.message);
+    }
+  }, []);
 
-        // Update status pesan inbound menjadi 'read'
-        await supabase
-          .from('messages')
-          .update({ status: 'read' })
-          .eq('contact_id', contactId)
-          .eq('direction', 'inbound')
-          .neq('status', 'read');
+  // 3. Aksi Membuka Chat Kontak (Tandai 'read' Seketika)
+  const handleSelectContact = async (contact) => {
+    setSelectedContact(contact);
 
-        // Hapus unread badge pada state lokal
-        setContacts((prev) =>
-          prev.map((c) => (c.id === contactId ? { ...c, unread_count: 0 } : c))
-        );
-      } catch (err) {
-        console.warn('Gagal memuat pesan:', err.message);
-      }
-    },
-    []
-  );
+    // Langsung hilangkan badge hijau di UI secara lokal
+    setContacts((prev) =>
+      prev.map((c) => (c.id === contact.id ? { ...c, unread_count: 0 } : c))
+    );
 
-  // 3. Supabase Realtime Subscription (Terima Pesan Masuk Secara Instan Tanpa Reload)
+    // Update status pesan masuk di Supabase menjadi 'read'
+    try {
+      await supabase
+        .from('messages')
+        .update({ status: 'read' })
+        .eq('contact_id', contact.id)
+        .eq('direction', 'inbound')
+        .neq('status', 'read');
+    } catch (err) {
+      console.warn('Gagal update status read:', err.message);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ page: 'chat', contactId: contact.id }, '');
+    }
+  };
+
+  // Realtime Listener Pesan Baru
   useEffect(() => {
     fetchActiveChats();
 
@@ -168,6 +179,11 @@ export default function App() {
           fetchActiveChats();
           if (selectedContact?.id === payload.new.contact_id) {
             setMessages((prev) => [...prev, payload.new]);
+            // Jika chat sedang terbuka, langsung tandai pesan baru sebagai read
+            supabase
+              .from('messages')
+              .update({ status: 'read' })
+              .eq('id', payload.new.id);
           }
         }
       )
@@ -187,13 +203,6 @@ export default function App() {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [messages]);
-
-  const handleSelectContact = (contact) => {
-    setSelectedContact(contact);
-    if (typeof window !== 'undefined') {
-      window.history.pushState({ page: 'chat', contactId: contact.id }, '');
-    }
-  };
 
   const handleBackToContacts = () => {
     if (typeof window !== 'undefined' && window.history.state?.page === 'chat') {
@@ -345,9 +354,9 @@ export default function App() {
               .single();
 
             if (data) {
-              setSelectedContact(data);
+              handleSelectContact(data);
             } else {
-              setSelectedContact({ phone_number: phoneNumber, name: phoneNumber });
+              handleSelectContact({ phone_number: phoneNumber, name: phoneNumber });
             }
             setCurrentView('chat');
           }}
@@ -364,9 +373,9 @@ export default function App() {
               .single();
 
             if (data) {
-              setSelectedContact(data);
+              handleSelectContact(data);
             } else {
-              setSelectedContact({ phone_number: phoneNumber, name: phoneNumber });
+              handleSelectContact({ phone_number: phoneNumber, name: phoneNumber });
             }
             setCurrentView('chat');
           }}
@@ -473,6 +482,7 @@ export default function App() {
               ) : (
                 filteredContacts.map((contact) => {
                   const isSelected = selectedContact?.id === contact.id;
+                  const hasUnread = contact.unread_count > 0;
                   return (
                     <div
                       key={contact.id}
@@ -489,7 +499,12 @@ export default function App() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <h2 className="font-semibold text-sm text-slate-800 truncate">
+                          <h2
+                            className={
+                              'text-sm truncate ' +
+                              (hasUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-800')
+                            }
+                          >
                             {contact.name || contact.phone_number}
                           </h2>
                           <span className="text-[10px] text-slate-400 shrink-0">
@@ -505,13 +520,18 @@ export default function App() {
                           </span>
                         </div>
                         {/* Cuplikan Chat Terakhir */}
-                        <p className="text-xs text-slate-500 truncate mt-0.5">
+                        <p
+                          className={
+                            'text-xs truncate mt-0.5 ' +
+                            (hasUnread ? 'font-semibold text-slate-800' : 'text-slate-500')
+                          }
+                        >
                           {contact.last_message || `+${contact.phone_number}`}
                         </p>
                       </div>
 
-                      {/* Unread Badge */}
-                      {contact.unread_count > 0 && (
+                      {/* Unread Badge (Hanya muncul jika > 0) */}
+                      {hasUnread && (
                         <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 shadow-sm">
                           {contact.unread_count}
                         </span>
@@ -868,7 +888,7 @@ export default function App() {
         onClose={() => setShowContactModal(false)}
         contacts={contacts}
         onSelectContact={(c) => {
-          setSelectedContact(c);
+          handleSelectContact(c);
         }}
         onContactCreated={(newC) => {
           setContacts((prev) => [newC, ...prev]);
