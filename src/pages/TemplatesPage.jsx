@@ -3,9 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 // Konfigurasi Kredensial Meta Graph API
 const META_WABA_ID = '163200896887310';
 const META_GRAPH_VERSION = 'v20.0';
-
-// Isikan Permanent System User Token dari Meta Business Suite Anda di sini
-const META_ACCESS_TOKEN = process.env.REACT_APP_META_TOKEN || 'ISIKAN_PERMANENT_META_TOKEN_ANDA_DI_SINI';
+const META_ACCESS_TOKEN = 'EAAZBLhjrRT18BSoHItgxuRkvZAVg9XXylyw0BZBQcdWBuZCJlOfuHoo69lbVjh5TKiNZA62dSMl411wSggNytzpWwcM0oCjXc410AZBhsKRowuyqnZBWT6vcncEBwgDgZAgF7sriDJocBiBH5VAlKqkA3gtkNGnLCdzN4vyjgvhPrSGIdcwJXTCGZCd1hFMOR8JFJIAZDZD';
 
 export default function TemplatesPage({ onSelectTemplateForChat }) {
   const [templates, setTemplates] = useState([]);
@@ -54,7 +52,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
       });
 
       setTemplates(formatted);
-      if (formatted.length > 0 && !selectedTemplate) {
+      if (formatted.length > 0) {
         setSelectedTemplate(formatted[0]);
       }
     } catch (err) {
@@ -63,7 +61,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
     } finally {
       setLoading(false);
     }
-  }, [selectedTemplate]);
+  }, []);
 
   useEffect(() => {
     fetchMetaTemplates();
@@ -195,17 +193,10 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
         </div>
       </div>
 
-      {/* Warning jika Token Belum Dipasang */}
-      {META_ACCESS_TOKEN.includes('ISIKAN_PERMANENT') && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl mb-6 text-xs leading-relaxed">
-          <strong>💡 Catatan Integrasi:</strong> Untuk terhubung ke server Meta, pastikan Anda telah memasukkan <strong>Permanent Meta Access Token</strong> pada variabel <code>META_ACCESS_TOKEN</code> di dalam file <code>TemplatesPage.jsx</code>.
-        </div>
-      )}
-
       {/* Error Alert */}
       {errorMsg && (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl mb-6 text-xs font-medium">
-          ❌ Meta API Connection Error: {errorMsg}
+          ❌ Meta API Error: {errorMsg}
         </div>
       )}
 
