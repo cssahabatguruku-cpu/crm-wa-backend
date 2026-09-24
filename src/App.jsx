@@ -48,6 +48,12 @@ export default function App() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showCrmPanel, setShowCrmPanel] = useState(false);
 
+  // Reference untuk mencegah stale closure di listener Realtime
+  const selectedContactRef = useRef(selectedContact);
+  useEffect(() => {
+    selectedContactRef.current = selectedContact;
+  }, [selectedContact]);
+
   // Status Channel Pengirim Aktif
   const [activeChannel] = useState({
     name: 'Sahabat Guru (Centang Biru)',
@@ -83,7 +89,6 @@ export default function App() {
       const unreadMap = {};
 
       (messagesData || []).forEach((msg) => {
-        // Cuplikan pesan paling baru per kontak
         if (!messageMap[msg.contact_id]) {
           messageMap[msg.contact_id] = msg;
         }
@@ -94,11 +99,10 @@ export default function App() {
         }
       });
 
-      // Filter kontak aktif
       const activeContacts = (contactsData || [])
         .filter((c) => messageMap[c.id])
         .map((c) => {
-          const isCurrentlySelected = selectedContact?.id === c.id;
+          const isCurrentlySelected = selectedContactRef.current?.id === c.id;
           return {
             ...c,
             last_message: messageMap[c.id]?.content || '',
@@ -114,80 +118,99 @@ export default function App() {
         typeof window !== 'undefined' &&
         window.innerWidth >= 768 &&
         activeContacts.length > 0 &&
-        !selectedContact
+        !selectedContactRef.current
       ) {
         setSelectedContact(activeContacts[0]);
       }
     } catch (err) {
       console.warn('Gagal memuat obrolan aktif:', err.message);
     }
-  }, [selectedContact]);
+  }, []);
 
   // 2. Fetch Isi Pesan + Otomatis Update Status Database Menjadi 'read'
-  const fetchMessages = useCallback(
-    async (contactId) => {
-      if (!contactId) return;
-      try {
-        const { data, error } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('contact_id', contactId)
-          .order('created_at', { ascending: true });
+  const fetchMessages = useCallback(async (contactId) => {
+    if (!contactId) return;
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('contact_id', contactId)
+        .order('created_at', { ascending: true });
 
-        if (error) throw error;
-        setMessages(data || []);
+      if (error) throw error;
+      setMessages(data || []);
 
-        // Cek apakah ada pesan masuk yang belum berstatus 'read'
-        const hasUnread = (data || []).some(
-          (m) => m.direction === 'inbound' && m.status !== 'read'
-        );
+      // Ubah seluruh pesan masuk dari kontak ini menjadi 'read' di Supabase
+      await supabase
+        .from('messages')
+        .update({ status: 'read' })
+        .eq('contact_id', contactId)
+        .eq('direction', 'inbound')
+        .neq('status', 'read');
 
-        if (hasUnread) {
-          // Update status di Supabase
-          await supabase
-            .from('messages')
-            .update({ status: 'read' })
-            .eq('contact_id', contactId)
-            .eq('direction', 'inbound');
-
-          // Hilangkan angka hijau pada kontak ini di UI
-          setContacts((prev) =>
-            prev.map((c) => (c.id === contactId ? { ...c, unread_count: 0 } : c))
-          );
-        }
-      } catch (err) {
-        console.warn('Gagal memuat pesan:', err.message);
-      }
-    },
-    []
-  );
+      // Hilangkan badge hijau secara instan di UI lokal
+      setContacts((prev) =>
+        prev.map((c) => (c.id === contactId ? { ...c, unread_count: 0 } : c))
+      );
+    } catch (err) {
+      console.warn('Gagal memuat pesan:', err.message);
+    }
+  }, []);
 
   // 3. Aksi Membuka Chat Kontak
-  const handleSelectContact = (contact) => {
+  const handleSelectContact = async (contact) => {
     setSelectedContact(contact);
+
+    // Langsung nolkan unread count di UI lokal
+    setContacts((prev) =>
+      prev.map((c) => (c.id === contact.id ? { ...c, unread_count: 0 } : c))
+    );
+
+    // Eksekusi update status ke Supabase
+    try {
+      await supabase
+        .from('messages')
+        .update({ status: 'read' })
+        .eq('contact_id', contact.id)
+        .eq('direction', 'inbound')
+        .neq('status', 'read');
+    } catch (err) {
+      console.warn('Gagal update status read:', err.message);
+    }
+
     if (typeof window !== 'undefined') {
       window.history.pushState({ page: 'chat', contactId: contact.id }, '');
     }
   };
 
-  // Realtime Listener Pesan Baru
+  // 4. Realtime Listener Pesan Masuk & Perubahan Database
   useEffect(() => {
     fetchActiveChats();
 
     const channel = supabase
-      .channel('public:messages')
+      .channel('realtime-messages-sync')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
+        { event: '*', schema: 'public', table: 'messages' },
         (payload) => {
           fetchActiveChats();
-          if (selectedContact?.id === payload.new.contact_id) {
-            setMessages((prev) => [...prev, payload.new]);
-            // Jika chat sedang aktif dibuka, langsung set status read di DB
-            supabase
-              .from('messages')
-              .update({ status: 'read' })
-              .eq('id', payload.new.id);
+
+          const activeSelected = selectedContactRef.current;
+
+          if (payload.eventType === 'INSERT') {
+            if (activeSelected && activeSelected.id === payload.new.contact_id) {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === payload.new.id)) return prev;
+                return [...prev, payload.new];
+              });
+
+              // Jika chat sedang aktif dibuka, langsung tandai sebagai 'read'
+              supabase
+                .from('messages')
+                .update({ status: 'read' })
+                .eq('id', payload.new.id)
+                .then();
+            }
           }
         }
       )
@@ -196,7 +219,7 @@ export default function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchActiveChats, selectedContact]);
+  }, [fetchActiveChats]);
 
   useEffect(() => {
     if (selectedContact?.id) fetchMessages(selectedContact.id);
