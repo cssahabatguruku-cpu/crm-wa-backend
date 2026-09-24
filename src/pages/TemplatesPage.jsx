@@ -5,6 +5,20 @@ const META_WABA_ID = '163200896887310';
 const META_GRAPH_VERSION = 'v20.0';
 const META_ACCESS_TOKEN = 'EAAZBLhjrRT18BSoHItgxuRkvZAVg9XXylyw0BZBQcdWBuZCJlOfuHoo69lbVjh5TKiNZA62dSMl411wSggNytzpWwcM0oCjXc410AZBhsKRowuyqnZBWT6vcncEBwgDgZAgF7sriDJocBiBH5VAlKqkA3gtkNGnLCdzN4vyjgvhPrSGIdcwJXTCGZCd1hFMOR8JFJIAZDZD';
 
+// Pilihan Kolom Database Kontak untuk Pemetaan
+const CONTACT_FIELDS_OPTIONS = [
+  { label: 'Nama Pelanggan (name)', value: 'name', sample: 'Ahmad Supardi' },
+  { label: 'Nomor WhatsApp (phone_number)', value: 'phone_number', sample: '6281234567890' },
+  { label: 'Instansi / Sekolah (institution)', value: 'institution', sample: 'SMA 1 Kudus' },
+  { label: 'Alamat Email (email)', value: 'email', sample: 'ahmad@example.com' },
+  { label: 'Kategori / Label (label)', value: 'label', sample: 'Guru' },
+  { label: 'Catatan CS (notes)', value: 'notes', sample: 'Siswa Aktif' },
+  // Custom field contoh yang sering digunakan
+  { label: 'Custom: Kota (custom_fields.kota)', value: 'custom.kota', sample: 'Kudus' },
+  { label: 'Custom: Nominal (custom_fields.nominal)', value: 'custom.nominal', sample: 'Rp 150.000' },
+  { label: 'Custom: Kode Voucher (custom_fields.voucher)', value: 'custom.voucher', sample: 'PROMO2026' },
+];
+
 export default function TemplatesPage({ onSelectTemplateForChat }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,8 +27,8 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState(null);
 
-  // States Variabel Pratinjau (misal: {{1}}, {{2}})
-  const [variables, setVariables] = useState({});
+  // State Pemetaan Variabel: { "{{1}}": "name", "{{2}}": "institution" }
+  const [mappings, setMappings] = useState({});
 
   // States Modal Ajukan Template Baru
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -38,7 +52,6 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
         throw new Error(result.error.message || 'Gagal terhubung ke Meta Graph API.');
       }
 
-      // Format data dari respons Meta API
       const formatted = (result.data || []).map((item) => {
         const bodyComp = item.components?.find((c) => c.type === 'BODY');
         return {
@@ -46,7 +59,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
           name: item.name,
           category: item.category,
           language: item.language,
-          status: item.status, // APPROVED, PENDING, REJECTED
+          status: item.status,
           body: bodyComp ? bodyComp.text : 'Tidak ada isi teks body.',
         };
       });
@@ -67,38 +80,44 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
     fetchMetaTemplates();
   }, [fetchMetaTemplates]);
 
-  // 2. Ekstrak placeholder {{1}}, {{2}} untuk input uji coba variabel
+  // 2. Deteksi Placeholder {{1}}, {{2}} dan Pasang Default Mapping
   useEffect(() => {
     if (selectedTemplate?.body) {
       const matches = selectedTemplate.body.match(/\{\{\d+\}\}/g) || [];
-      const initialVars = {};
+      const initialMap = {};
+
       matches.forEach((placeholder, idx) => {
-        const defaultSample =
-          idx === 0
-            ? 'Budi Santoso'
-            : idx === 1
-            ? 'Kurikulum Merdeka 2026'
-            : `Nilai ${idx + 1}`;
-        initialVars[placeholder] = defaultSample;
+        // Default mapping: {{1}} -> name, {{2}} -> institution, dst.
+        if (idx === 0) initialMap[placeholder] = 'name';
+        else if (idx === 1) initialMap[placeholder] = 'institution';
+        else if (idx === 2) initialMap[placeholder] = 'email';
+        else initialMap[placeholder] = 'notes';
       });
-      setVariables(initialVars);
+
+      setMappings(initialMap);
     }
   }, [selectedTemplate]);
 
-  // Hasilkan Teks Pratinjau dengan Variabel Terisi
+  // 3. Render Pratinjau Teks Pesan Menggunakan Contoh Data Field
   const getRenderedPreview = () => {
     if (!selectedTemplate) return '';
     let rendered = selectedTemplate.body;
-    Object.keys(variables).forEach((placeholder) => {
+
+    Object.keys(mappings).forEach((placeholder) => {
+      const fieldKey = mappings[placeholder];
+      const fieldObj = CONTACT_FIELDS_OPTIONS.find((f) => f.value === fieldKey);
+      const sampleVal = fieldObj ? fieldObj.sample : `[${fieldKey}]`;
+
       rendered = rendered.replace(
         new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'),
-        variables[placeholder] || placeholder
+        sampleVal
       );
     });
+
     return rendered;
   };
 
-  // 3. Ajukan Template Baru ke Meta Graph API (POST)
+  // 4. Ajukan Template Baru ke Meta Graph API
   const handleCreateTemplate = async (e) => {
     e.preventDefault();
     if (!newTmplName.trim() || !newTmplBody.trim()) return;
@@ -140,9 +159,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
         throw new Error(resData.error.message);
       }
 
-      alert(
-        `Berhasil! Template "${formattedName}" telah diajukan ke Meta (ID: ${resData.id}). Status saat ini: PENDING.`
-      );
+      alert(`Berhasil! Template "${formattedName}" telah diajukan ke Meta (ID: ${resData.id}).`);
       setNewTmplName('');
       setNewTmplBody('');
       setShowCreateModal(false);
@@ -173,7 +190,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
             Manajemen Template Siaran (Meta HSM)
           </h1>
           <p className="text-slate-500 text-sm">
-            Status persetujuan, pengajuan, dan pengujian template langsung dari WhatsApp Cloud API
+            Petakan variabel template Meta dengan kolom kontak database Supabase
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -230,7 +247,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
 
       {/* Main Grid Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Kolom Kiri: Daftar Template dari Meta */}
+        {/* Kolom Kiri: Daftar Template Meta */}
         <div className="lg:col-span-2 space-y-3">
           {loading ? (
             <div className="text-slate-400 text-sm py-12 text-center bg-white rounded-xl border p-4">
@@ -268,7 +285,6 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
                       </div>
                     </div>
 
-                    {/* Status Badge Meta */}
                     <span
                       className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase border ${
                         tmpl.status === 'APPROVED'
@@ -295,39 +311,49 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
           )}
         </div>
 
-        {/* Kolom Kanan: Pratinjau Tampilan di WhatsApp & Input Variabel */}
+        {/* Kolom Kanan: Pemetaan Variabel ke Field Kontak & Pratinjau Chat */}
         <div className="lg:col-span-1 bg-white rounded-xl shadow-sm border border-slate-200 p-5 sticky top-6 self-start">
           <h2 className="font-bold text-slate-800 text-xs uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">
-            PRATINJAU TAMPILAN DI WHATSAPP
+            PEMETAAN VARIABEL & PRATINJAU
           </h2>
 
           {selectedTemplate ? (
             <>
-              {/* Dynamic Variable Inputs */}
-              {Object.keys(variables).length > 0 && (
-                <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase block">
-                    Isi Variabel Uji Coba:
+              {/* Dynamic Variable Mapping Selectors */}
+              {Object.keys(mappings).length > 0 ? (
+                <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
+                  <span className="text-[11px] font-bold text-slate-600 uppercase block">
+                    Pilih Kolom Kontak untuk Tiap Variabel:
                   </span>
-                  {Object.keys(variables).map((placeholder) => (
-                    <div key={placeholder} className="flex items-center gap-2">
-                      <span className="text-xs font-mono font-bold text-emerald-700 w-10">
-                        {placeholder}
-                      </span>
-                      <input
-                        type="text"
-                        value={variables[placeholder]}
+
+                  {Object.keys(mappings).map((placeholder) => (
+                    <div key={placeholder} className="space-y-1">
+                      <label className="text-xs font-mono font-bold text-emerald-700 block">
+                        Variabel {placeholder} diisi oleh:
+                      </label>
+                      <select
+                        value={mappings[placeholder]}
                         onChange={(e) =>
-                          setVariables({
-                            ...variables,
+                          setMappings({
+                            ...mappings,
                             [placeholder]: e.target.value,
                           })
                         }
-                        className="flex-1 border border-slate-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                      />
+                        className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      >
+                        {CONTACT_FIELDS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <p className="text-xs text-slate-400 mb-4 italic">
+                  Template ini tidak memiliki variabel dinamis (seperti {"{{1}}"}).
+                </p>
               )}
 
               {/* Chat Bubble Simulation */}
@@ -362,7 +388,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
             </>
           ) : (
             <div className="py-12 text-center text-slate-400 text-xs">
-              <p>Pilih template di sebelah kiri untuk melihat pratinjau.</p>
+              <p>Pilih template di sebelah kiri untuk mengatur pemetaan variabel.</p>
             </div>
           )}
         </div>
