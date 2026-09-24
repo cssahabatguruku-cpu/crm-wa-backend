@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import TemplateModal from './components/modals/TemplateModal';
 import BillingModal from './components/modals/BillingModal';
 import ContactModal from './components/modals/ContactModal';
+import ContactsPage from './pages/ContactsPage';
 import {
   SendIcon,
   ArrowLeftIcon,
@@ -23,6 +24,7 @@ const DEFAULT_SUPABASE_ANON_KEY =
 const DEFAULT_API_URL = '/api/send-message';
 
 export default function App() {
+  const [currentView, setCurrentView] = useState('chat'); // 'chat' | 'contacts'
   const [contacts, setContacts] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -42,7 +44,7 @@ export default function App() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showCrmPanel, setShowCrmPanel] = useState(false);
 
-  // Status Channel Pengirim Aktif (Nomor Official WhatsApp)
+  // Status Channel Pengirim Aktif
   const [activeChannel] = useState({
     name: 'Sahabat Guru (Centang Biru)',
     number: '+62 823-2272-6989',
@@ -197,22 +199,42 @@ export default function App() {
         </div>
       )}
 
-      {/* Mini Desktop Sidebar */}
+      {/* Mini Desktop Sidebar Navigasi Utama */}
       <div className="hidden md:flex w-16 bg-slate-900 flex-col items-center py-4 justify-between border-r border-slate-800 shrink-0">
         <div className="flex flex-col items-center gap-6">
           <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shadow-lg">
             SG
           </div>
-          <button title="Kotak Masuk" className="p-3 text-emerald-400 bg-slate-800 rounded-xl">
+
+          {/* Tombol Kotak Masuk (Chat) */}
+          <button
+            title="Kotak Masuk Chat"
+            onClick={() => setCurrentView('chat')}
+            className={
+              'p-3 rounded-xl transition ' +
+              (currentView === 'chat'
+                ? 'text-emerald-400 bg-slate-800 shadow'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800')
+            }
+          >
             <InboxIcon />
           </button>
+
+          {/* Tombol Master Data Kontak */}
           <button
-            title="Buku Kontak & Tambah Kontak Baru"
-            onClick={() => setShowContactModal(true)}
-            className="p-3 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
+            title="Master Data Kontak & Import Excel"
+            onClick={() => setCurrentView('contacts')}
+            className={
+              'p-3 rounded-xl transition ' +
+              (currentView === 'contacts'
+                ? 'text-emerald-400 bg-slate-800 shadow'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800')
+            }
           >
             <UserIcon />
           </button>
+
+          {/* Tombol Template Broadcast */}
           <button
             title="Template Broadcast Meta (HSM)"
             onClick={() => setShowTemplateModal(true)}
@@ -220,6 +242,8 @@ export default function App() {
           >
             <FileTextIcon />
           </button>
+
+          {/* Tombol Saldo Meta */}
           <button
             title="Saldo & Tagihan Meta WABA"
             onClick={() => setShowBillingModal(true)}
@@ -230,324 +254,352 @@ export default function App() {
         </div>
       </div>
 
-      {/* Kolom Daftar Kontak Kiri */}
-      <div
-        className={
-          (selectedContact ? 'hidden md:flex' : 'flex') +
-          ' w-full md:w-80 lg:w-96 bg-white border-r border-slate-200 flex-col shrink-0 h-full'
-        }
-      >
-        {/* Header Kontak dengan Info Akun Official */}
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow">
-              SG
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <h1 className="font-bold text-sm md:text-base text-slate-900 leading-tight">Sahabat Guru</h1>
-                <span className="w-2 h-2 rounded-full bg-emerald-500" title="Nomor Official Terhubung"></span>
-              </div>
-              <p className="text-[10px] text-emerald-700 font-medium">{activeChannel.number}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowContactModal(true)}
-              title="Buku Kontak / Tambah Kontak"
-              className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition text-xs font-semibold flex items-center gap-1"
-            >
-              <span>+ Kontak</span>
-            </button>
-            <button
-              onClick={async () => {
-                setIsRefreshing(true);
-                await fetchContacts();
-                if (selectedContact) await fetchMessages(selectedContact.id);
-                setIsRefreshing(false);
-              }}
-              title="Segarkan data"
-              className="p-2 text-slate-500 hover:text-emerald-600 rounded-lg hover:bg-slate-100 transition"
-            >
-              <RefreshCwIcon spinning={isRefreshing} />
-            </button>
-          </div>
-        </div>
-
-        {/* Search Bar Input */}
-        <div className="p-3 border-b border-slate-100 shrink-0">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <SearchIcon />
-            </div>
-            <input
-              type="text"
-              placeholder="Cari nama atau nomor HP..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-        </div>
-
-        {/* Tab Segment Filter */}
-        <div className="px-3 py-2 border-b border-slate-100 flex gap-1.5 overflow-x-auto text-xs shrink-0">
-          {['all', 'Hot Lead', 'Pelanggan', 'Alumni Pelatihan'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveFilterTab(tab)}
-              className={
-                'px-3 py-1 rounded-full font-medium whitespace-nowrap transition ' +
-                (activeFilterTab === tab ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')
-              }
-            >
-              {tab === 'all' ? 'Semua Obrolan' : tab}
-            </button>
-          ))}
-        </div>
-
-        {/* Daftar Kontak List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
-          {filteredContacts.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 text-xs md:text-sm">
-              <p>Belum ada kontak ditemukan.</p>
-              <button
-                onClick={() => setShowContactModal(true)}
-                className="mt-2 text-xs font-semibold text-emerald-600 hover:underline"
-              >
-                + Tambah Kontak Pertama
-              </button>
-            </div>
-          ) : (
-            filteredContacts.map((contact) => {
-              const isSelected = selectedContact?.id === contact.id;
-              const tags = contactTags[contact.id] || ['Hot Lead'];
-              return (
-                <div
-                  key={contact.id}
-                  onClick={() => handleSelectContact(contact)}
-                  className={
-                    'p-3.5 flex items-start gap-3 cursor-pointer transition active:bg-slate-100 ' +
-                    (isSelected ? 'bg-emerald-50/80 md:border-l-4 md:border-emerald-500' : 'hover:bg-slate-50')
-                  }
-                >
-                  <div className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
-                    {(contact.name || contact.phone_number || 'U')[0].toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <h2 className="font-semibold text-sm text-slate-800 truncate">
-                        {contact.name || contact.phone_number}
-                      </h2>
-                      <span className="text-[10px] text-slate-400 shrink-0">
-                        {contact.created_at
-                          ? new Date(contact.created_at).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : ''}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 truncate mt-0.5">+{contact.phone_number}</p>
-                    <div className="flex gap-1 mt-1.5 flex-wrap">
-                      {tags.map((t, idx) => (
-                        <span
-                          key={idx}
-                          className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-md"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+      {/* MAIN VIEW AREA: TAMPILAN DASHBOARD KONTAK ATAU CHAT */}
+      {currentView === 'contacts' ? (
+        <ContactsPage
+          supabaseUrl={DEFAULT_SUPABASE_URL}
+          supabaseKey={DEFAULT_SUPABASE_ANON_KEY}
+          onSelectContact={(phoneNumber) => {
+            const found = contacts.find((c) => c.phone_number === phoneNumber);
+            if (found) {
+              setSelectedContact(found);
+            } else {
+              setSelectedContact({ phone_number: phoneNumber, name: phoneNumber });
+            }
+            setCurrentView('chat');
+          }}
+        />
+      ) : (
+        <>
+          {/* Kolom Daftar Kontak Kiri (Tampilan Chat Mode) */}
+          <div
+            className={
+              (selectedContact ? 'hidden md:flex' : 'flex') +
+              ' w-full md:w-80 lg:w-96 bg-white border-r border-slate-200 flex-col shrink-0 h-full'
+            }
+          >
+            {/* Header Kontak */}
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow">
+                  SG
                 </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Mobile Bottom Bar */}
-        <div className="md:hidden border-t border-slate-200 bg-white p-2 flex justify-around items-center shrink-0">
-          <button
-            onClick={() => setShowContactModal(true)}
-            className="flex flex-col items-center gap-1 py-1 px-3 text-slate-600 hover:text-emerald-600 active:scale-95 transition"
-          >
-            <UserIcon />
-            <span className="text-[10px] font-medium">Buku Kontak</span>
-          </button>
-          <button
-            onClick={() => setShowTemplateModal(true)}
-            className="flex flex-col items-center gap-1 py-1 px-3 text-slate-600 hover:text-emerald-600 active:scale-95 transition"
-          >
-            <FileTextIcon />
-            <span className="text-[10px] font-medium">Template</span>
-          </button>
-          <button
-            onClick={() => setShowBillingModal(true)}
-            className="flex flex-col items-center gap-1 py-1 px-3 text-slate-600 hover:text-emerald-600 active:scale-95 transition"
-          >
-            <CreditCardIcon />
-            <span className="text-[10px] font-medium">Saldo Meta</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Kolom Percakapan Chat Kanan */}
-      <div
-        className={(selectedContact ? 'flex' : 'hidden md:flex') + ' flex-1 flex-col bg-slate-50 min-w-0 h-full relative'}
-      >
-        {selectedContact ? (
-          <>
-            {/* Chat Room Header */}
-            <div className="h-14 sm:h-16 px-3 md:px-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-sm z-20">
-              <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                <button
-                  onClick={handleBackToContacts}
-                  className="md:hidden p-2 -ml-1 text-slate-700 hover:text-slate-900 active:bg-slate-100 rounded-full flex items-center justify-center shrink-0"
-                  title="Kembali"
-                >
-                  <ArrowLeftIcon />
-                </button>
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0">
-                  {(selectedContact.name || 'U')[0].toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <h2 className="font-bold text-slate-800 text-xs sm:text-sm truncate">
-                    {selectedContact.name || selectedContact.phone_number}
-                  </h2>
-                  <p className="text-[10px] sm:text-[11px] text-emerald-600 flex items-center gap-1 truncate">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                    +{selectedContact.phone_number}
-                  </p>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h1 className="font-bold text-sm md:text-base text-slate-900 leading-tight">Sahabat Guru</h1>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" title="Nomor Official Terhubung"></span>
+                  </div>
+                  <p className="text-[10px] text-emerald-700 font-medium">{activeChannel.number}</p>
                 </div>
               </div>
-
-              {/* Action Buttons Header */}
-              <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+              <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setShowTemplateModal(true)}
-                  className="px-2.5 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg flex items-center gap-1 font-medium transition"
-                  title="Buka Template Meta"
+                  onClick={() => setCurrentView('contacts')}
+                  title="Master Dashboard Kontak"
+                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition text-xs font-semibold flex items-center gap-1"
                 >
-                  <FileTextIcon />
-                  <span className="hidden sm:inline">Template</span>
+                  <span>+ Kontak</span>
                 </button>
-
                 <button
-                  onClick={() => setShowBillingModal(true)}
-                  className="px-2.5 py-1.5 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg flex items-center gap-1 font-medium transition"
-                  title="Cek Saldo Akun"
+                  onClick={async () => {
+                    setIsRefreshing(true);
+                    await fetchContacts();
+                    if (selectedContact) await fetchMessages(selectedContact.id);
+                    setIsRefreshing(false);
+                  }}
+                  title="Segarkan data"
+                  className="p-2 text-slate-500 hover:text-emerald-600 rounded-lg hover:bg-slate-100 transition"
                 >
-                  <CreditCardIcon />
-                  <span className="hidden sm:inline">Saldo</span>
-                </button>
-
-                <button
-                  onClick={() => setShowCrmPanel(!showCrmPanel)}
-                  className={
-                    'p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition ' +
-                    (showCrmPanel ? 'bg-slate-100 text-emerald-600' : '')
-                  }
-                  title="Info Profil Pelanggan"
-                >
-                  <UserIcon />
+                  <RefreshCwIcon spinning={isRefreshing} />
                 </button>
               </div>
             </div>
 
-            {/* Bubble Messages Flow */}
-            <div ref={chatContainerRef} className="flex-1 p-3 md:p-6 overflow-y-auto space-y-3 md:space-y-4">
-              <div className="text-center my-1 md:my-2">
-                <span className="px-3 py-1 bg-white/90 border border-slate-200 rounded-full text-[10px] md:text-[11px] text-slate-500 shadow-sm">
-                  Percakapan Terenkripsi • {activeChannel.name}
-                </span>
-              </div>
-
-              {messages.map((msg) => {
-                const isOutbound = msg.direction === 'outbound';
-                return (
-                  <div key={msg.id} className={'flex ' + (isOutbound ? 'justify-end' : 'justify-start')}>
-                    <div
-                      className={
-                        'max-w-[85%] md:max-w-[70%] rounded-2xl px-3.5 py-2 md:px-4 md:py-2.5 shadow-sm text-xs md:text-sm relative leading-relaxed ' +
-                        (isOutbound
-                          ? 'bg-emerald-600 text-white rounded-br-none'
-                          : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none')
-                      }
-                    >
-                      <p className="whitespace-pre-line break-words">{msg.content}</p>
-                      <div
-                        className={
-                          'flex items-center justify-end gap-1.5 mt-1 text-[9px] md:text-[10px] ' +
-                          (isOutbound ? 'text-emerald-100' : 'text-slate-400')
-                        }
-                      >
-                        <span>
-                          {msg.created_at
-                            ? new Date(msg.created_at).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : ''}
-                        </span>
-                        {isOutbound && (
-                          <span>
-                            {msg.status === 'read' ? (
-                              <CheckCheckIcon color="text-cyan-200" />
-                            ) : msg.status === 'delivered' ? (
-                              <CheckCheckIcon color="text-emerald-200" />
-                            ) : (
-                              <CheckIcon />
-                            )}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Chat Input Area */}
-            <div className="p-2.5 md:p-4 bg-white border-t border-slate-200 shrink-0">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSendMessage();
-                }}
-                className="flex items-center gap-2"
-              >
+            {/* Search Bar Input */}
+            <div className="p-3 border-b border-slate-100 shrink-0">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <SearchIcon />
+                </div>
                 <input
                   type="text"
-                  placeholder="Ketik balasan pesan WhatsApp..."
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  disabled={isSending}
-                  className="flex-1 px-3.5 py-2.5 md:px-4 md:py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
+                  placeholder="Cari nama atau nomor HP..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
+              </div>
+            </div>
+
+            {/* Tab Segment Filter */}
+            <div className="px-3 py-2 border-b border-slate-100 flex gap-1.5 overflow-x-auto text-xs shrink-0">
+              {['all', 'Hot Lead', 'Pelanggan', 'Alumni Pelatihan'].map((tab) => (
                 <button
-                  type="submit"
-                  disabled={isSending || !inputText.trim()}
-                  className="px-4 py-2.5 md:px-5 md:py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl flex items-center justify-center gap-1.5 font-medium text-xs md:text-sm transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                  key={tab}
+                  onClick={() => setActiveFilterTab(tab)}
+                  className={
+                    'px-3 py-1 rounded-full font-medium whitespace-nowrap transition ' +
+                    (activeFilterTab === tab ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')
+                  }
                 >
-                  <SendIcon />
-                  <span className="hidden sm:inline">{isSending ? 'Mengirim...' : 'Kirim'}</span>
+                  {tab === 'all' ? 'Semua Obrolan' : tab}
                 </button>
-              </form>
+              ))}
             </div>
-          </>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-6 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
-              <InboxIcon />
+
+            {/* Daftar Kontak List */}
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
+              {filteredContacts.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-xs md:text-sm">
+                  <p>Belum ada kontak ditemukan.</p>
+                  <button
+                    onClick={() => setCurrentView('contacts')}
+                    className="mt-2 text-xs font-semibold text-emerald-600 hover:underline"
+                  >
+                    + Kelola Master Kontak
+                  </button>
+                </div>
+              ) : (
+                filteredContacts.map((contact) => {
+                  const isSelected = selectedContact?.id === contact.id;
+                  const tags = contactTags[contact.id] || ['Hot Lead'];
+                  return (
+                    <div
+                      key={contact.id}
+                      onClick={() => handleSelectContact(contact)}
+                      className={
+                        'p-3.5 flex items-start gap-3 cursor-pointer transition active:bg-slate-100 ' +
+                        (isSelected ? 'bg-emerald-50/80 md:border-l-4 md:border-emerald-500' : 'hover:bg-slate-50')
+                      }
+                    >
+                      <div className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
+                        {(contact.name || contact.phone_number || 'U')[0].toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h2 className="font-semibold text-sm text-slate-800 truncate">
+                            {contact.name || contact.phone_number}
+                          </h2>
+                          <span className="text-[10px] text-slate-400 shrink-0">
+                            {contact.created_at
+                              ? new Date(contact.created_at).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : ''}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 truncate mt-0.5">+{contact.phone_number}</p>
+                        <div className="flex gap-1 mt-1.5 flex-wrap">
+                          {tags.map((t, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-md"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
-            <p className="text-sm font-semibold text-slate-600">Pilih Kontak Pelanggan</p>
-            <p className="text-xs text-slate-400 mt-1 max-w-xs">
-              Klik kontak di samping atau gunakan tombol <strong>+ Kontak</strong> untuk memulai percakapan baru.
-            </p>
+
+            {/* Mobile Bottom Bar */}
+            <div className="md:hidden border-t border-slate-200 bg-white p-2 flex justify-around items-center shrink-0">
+              <button
+                onClick={() => setCurrentView('chat')}
+                className={
+                  'flex flex-col items-center gap-1 py-1 px-3 transition ' +
+                  (currentView === 'chat' ? 'text-emerald-600 font-bold' : 'text-slate-600')
+                }
+              >
+                <InboxIcon />
+                <span className="text-[10px] font-medium">Obrolan</span>
+              </button>
+              <button
+                onClick={() => setCurrentView('contacts')}
+                className={
+                  'flex flex-col items-center gap-1 py-1 px-3 transition ' +
+                  (currentView === 'contacts' ? 'text-emerald-600 font-bold' : 'text-slate-600')
+                }
+              >
+                <UserIcon />
+                <span className="text-[10px] font-medium">Data Kontak</span>
+              </button>
+              <button
+                onClick={() => setShowTemplateModal(true)}
+                className="flex flex-col items-center gap-1 py-1 px-3 text-slate-600 hover:text-emerald-600 transition"
+              >
+                <FileTextIcon />
+                <span className="text-[10px] font-medium">Template</span>
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Kolom Percakapan Chat Kanan */}
+          <div
+            className={
+              (selectedContact ? 'flex' : 'hidden md:flex') +
+              ' flex-1 flex-col bg-slate-50 min-w-0 h-full relative'
+            }
+          >
+            {selectedContact ? (
+              <>
+                {/* Chat Room Header */}
+                <div className="h-14 sm:h-16 px-3 md:px-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-sm z-20">
+                  <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                    <button
+                      onClick={handleBackToContacts}
+                      className="md:hidden p-2 -ml-1 text-slate-700 hover:text-slate-900 active:bg-slate-100 rounded-full flex items-center justify-center shrink-0"
+                      title="Kembali"
+                    >
+                      <ArrowLeftIcon />
+                    </button>
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0">
+                      {(selectedContact.name || 'U')[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="font-bold text-slate-800 text-xs sm:text-sm truncate">
+                        {selectedContact.name || selectedContact.phone_number}
+                      </h2>
+                      <p className="text-[10px] sm:text-[11px] text-emerald-600 flex items-center gap-1 truncate">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                        +{selectedContact.phone_number}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons Header */}
+                  <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+                    <button
+                      onClick={() => setShowTemplateModal(true)}
+                      className="px-2.5 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg flex items-center gap-1 font-medium transition"
+                      title="Buka Template Meta"
+                    >
+                      <FileTextIcon />
+                      <span className="hidden sm:inline">Template</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowBillingModal(true)}
+                      className="px-2.5 py-1.5 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg flex items-center gap-1 font-medium transition"
+                      title="Cek Saldo Akun"
+                    >
+                      <CreditCardIcon />
+                      <span className="hidden sm:inline">Saldo</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowCrmPanel(!showCrmPanel)}
+                      className={
+                        'p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition ' +
+                        (showCrmPanel ? 'bg-slate-100 text-emerald-600' : '')
+                      }
+                      title="Info Profil Pelanggan"
+                    >
+                      <UserIcon />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bubble Messages Flow */}
+                <div ref={chatContainerRef} className="flex-1 p-3 md:p-6 overflow-y-auto space-y-3 md:space-y-4">
+                  <div className="text-center my-1 md:my-2">
+                    <span className="px-3 py-1 bg-white/90 border border-slate-200 rounded-full text-[10px] md:text-[11px] text-slate-500 shadow-sm">
+                      Percakapan Terenkripsi • {activeChannel.name}
+                    </span>
+                  </div>
+
+                  {messages.map((msg) => {
+                    const isOutbound = msg.direction === 'outbound';
+                    return (
+                      <div key={msg.id} className={'flex ' + (isOutbound ? 'justify-end' : 'justify-start')}>
+                        <div
+                          className={
+                            'max-w-[85%] md:max-w-[70%] rounded-2xl px-3.5 py-2 md:px-4 md:py-2.5 shadow-sm text-xs md:text-sm relative leading-relaxed ' +
+                            (isOutbound
+                              ? 'bg-emerald-600 text-white rounded-br-none'
+                              : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none')
+                          }
+                        >
+                          <p className="whitespace-pre-line break-words">{msg.content}</p>
+                          <div
+                            className={
+                              'flex items-center justify-end gap-1.5 mt-1 text-[9px] md:text-[10px] ' +
+                              (isOutbound ? 'text-emerald-100' : 'text-slate-400')
+                            }
+                          >
+                            <span>
+                              {msg.created_at
+                                ? new Date(msg.created_at).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                : ''}
+                            </span>
+                            {isOutbound && (
+                              <span>
+                                {msg.status === 'read' ? (
+                                  <CheckCheckIcon color="text-cyan-200" />
+                                ) : msg.status === 'delivered' ? (
+                                  <CheckCheckIcon color="text-emerald-200" />
+                                ) : (
+                                  <CheckIcon />
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Chat Input Area */}
+                <div className="p-2.5 md:p-4 bg-white border-t border-slate-200 shrink-0">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <input
+                      type="text"
+                      placeholder="Ketik balasan pesan WhatsApp..."
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      disabled={isSending}
+                      className="flex-1 px-3.5 py-2.5 md:px-4 md:py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSending || !inputText.trim()}
+                      className="px-4 py-2.5 md:px-5 md:py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl flex items-center justify-center gap-1.5 font-medium text-xs md:text-sm transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                    >
+                      <SendIcon />
+                      <span className="hidden sm:inline">{isSending ? 'Mengirim...' : 'Kirim'}</span>
+                    </button>
+                  </form>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-6 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                  <InboxIcon />
+                </div>
+                <p className="text-sm font-semibold text-slate-600">Pilih Kontak Pelanggan</p>
+                <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                  Klik kontak di samping atau klik tombol ikon Kontak di sidebar kiri untuk mengelola master data.
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* CRM Customer Profile Panel */}
       {showCrmPanel && selectedContact && (
@@ -666,7 +718,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal 1: Buku Kontak & Tambah Kontak Baru */}
+      {/* Modal 1: Buku Kontak Modal (Legacy Support) */}
       <ContactModal
         isOpen={showContactModal}
         onClose={() => setShowContactModal(false)}
