@@ -1,8 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+
+// Konfigurasi Kredensial Meta Graph API
+const META_WABA_ID = '163200896887310';
+const META_GRAPH_VERSION = 'v20.0';
+
+// Isikan Permanent System User Token dari Meta Business Suite Anda di sini
+const META_ACCESS_TOKEN = process.env.REACT_APP_META_TOKEN || 'ISIKAN_PERMANENT_META_TOKEN_ANDA_DI_SINI';
 
 export default function TemplatesPage({ onSelectTemplateForChat }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState(null);
@@ -18,123 +26,143 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
   const [newTmplBody, setNewTmplBody] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Data Contoh Template Meta HSM
-  const defaultTemplates = [
-    {
-      id: 'tmpl_001',
-      name: 'promo_pelatihan_guru_v1',
-      category: 'MARKETING',
-      language: 'id',
-      status: 'APPROVED',
-      created_at: '2026-09-20',
-      body: 'Halo Bapak/Ibu {{1}}, Kabar gembira! Sahabat Guru membuka pendaftaran workshop bersertifikat 32 JP: "{{2}}". Dapatkan diskon khusus alumni sebesar 35% sebelum kuota terpenuhi. Balas pesan ini untuk info pendaftaran lengkap.',
-    },
-    {
-      id: 'tmpl_002',
-      name: 'notifikasi_resi_pengiriman',
-      category: 'UTILITY',
-      language: 'id',
-      status: 'APPROVED',
-      created_at: '2026-09-22',
-      body: 'Halo Kak {{1}}, Pesanan buku & modul pelatihan Anda telah diserahkan ke kurir {{2}} dengan nomor resi: *{{3}}*. Anda dapat melacak posisi paket secara berkala.',
-    },
-    {
-      id: 'tmpl_003',
-      name: 'pengingat_tagihan_workshop',
-      category: 'UTILITY',
-      language: 'id',
-      status: 'APPROVED',
-      created_at: '2026-09-18',
-      body: 'Yth. {{1}}, Ini adalah pengingat ramah bahwa pendaftaran workshop "{{2}}" akan kedaluwarsa dalam {{3}} jam. Total tagihan: Rp {{4}}. Silakan selesaikan pembayaran melalui portal resmi.',
-    },
-    {
-      id: 'tmpl_004',
-      name: 'broadcast_fitur_baru_ai',
-      category: 'MARKETING',
-      language: 'id',
-      status: 'PENDING',
-      created_at: '2026-09-23',
-      body: 'Halo Bapak/Ibu Guru {{1}}, Kini telah hadir asisten AI pembuat RPP & Modul Ajar otomatis di Sahabat Guru. Coba gratis fitur ini sekarang juga melalui dasbor Anda!',
-    },
-    {
-      id: 'tmpl_005',
-      name: 'broadcast_voucher_diskon_urgent',
-      category: 'MARKETING',
-      language: 'id',
-      status: 'REJECTED',
-      created_at: '2026-09-15',
-      body: 'BURUAN DISKON KILAT 90% KHUSUS HARI INI SAJA! Klik link: {{1}}',
-    },
-  ];
-
-  // Fetch / Init Templates
-  useEffect(() => {
+  // 1. Fetch Template Langsung dari Server Meta Graph API
+  const fetchMetaTemplates = useCallback(async () => {
     setLoading(true);
-    // Di sini Anda bisa mengintegrasikan API GET Meta Graph API:
-    // https://graph.facebook.com/v20.0/{waba_id}/message_templates
-    setTimeout(() => {
-      setTemplates(defaultTemplates);
-      setSelectedTemplate(defaultTemplates[0]);
-      setLoading(false);
-    }, 300);
-  }, []);
+    setErrorMsg(null);
 
-  // Ekstrak placeholder {{1}}, {{2}} dari teks template
+    try {
+      const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${META_WABA_ID}/message_templates?limit=100&access_token=${META_ACCESS_TOKEN}`;
+      const response = await fetch(url);
+      const result = await response.json();
+
+      if (result.error) {
+        throw new Error(result.error.message || 'Gagal terhubung ke Meta Graph API.');
+      }
+
+      // Format data dari respons Meta API
+      const formatted = (result.data || []).map((item) => {
+        const bodyComp = item.components?.find((c) => c.type === 'BODY');
+        return {
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          language: item.language,
+          status: item.status, // APPROVED, PENDING, REJECTED
+          body: bodyComp ? bodyComp.text : 'Tidak ada isi teks body.',
+        };
+      });
+
+      setTemplates(formatted);
+      if (formatted.length > 0 && !selectedTemplate) {
+        setSelectedTemplate(formatted[0]);
+      }
+    } catch (err) {
+      console.error('Meta API Error:', err);
+      setErrorMsg(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedTemplate]);
+
+  useEffect(() => {
+    fetchMetaTemplates();
+  }, [fetchMetaTemplates]);
+
+  // 2. Ekstrak placeholder {{1}}, {{2}} untuk input uji coba variabel
   useEffect(() => {
     if (selectedTemplate?.body) {
       const matches = selectedTemplate.body.match(/\{\{\d+\}\}/g) || [];
       const initialVars = {};
       matches.forEach((placeholder, idx) => {
-        const defaultSample = idx === 0 ? 'Budi Santoso' : idx === 1 ? 'Kurikulum Merdeka 2026' : `Variabel ${idx + 1}`;
+        const defaultSample =
+          idx === 0
+            ? 'Budi Santoso'
+            : idx === 1
+            ? 'Kurikulum Merdeka 2026'
+            : `Nilai ${idx + 1}`;
         initialVars[placeholder] = defaultSample;
       });
       setVariables(initialVars);
     }
   }, [selectedTemplate]);
 
-  // Hasilkan Teks Akhir Pratinjau dengan Variabel Terisi
+  // Hasilkan Teks Pratinjau dengan Variabel Terisi
   const getRenderedPreview = () => {
     if (!selectedTemplate) return '';
     let rendered = selectedTemplate.body;
     Object.keys(variables).forEach((placeholder) => {
-      rendered = rendered.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), variables[placeholder] || placeholder);
+      rendered = rendered.replace(
+        new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'),
+        variables[placeholder] || placeholder
+      );
     });
     return rendered;
   };
 
-  // Submit Template Baru ke Meta
-  const handleCreateTemplate = (e) => {
+  // 3. Ajukan Template Baru ke Meta Graph API (POST)
+  const handleCreateTemplate = async (e) => {
     e.preventDefault();
     if (!newTmplName.trim() || !newTmplBody.trim()) return;
 
     setIsSubmitting(true);
-    const formattedName = newTmplName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    const formattedName = newTmplName
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/[^a-z0-9_]/g, '');
 
-    const newTemplate = {
-      id: 'tmpl_' + Date.now(),
+    const payload = {
       name: formattedName,
       category: newTmplCategory,
       language: newTmplLanguage,
-      status: 'PENDING',
-      created_at: new Date().toISOString().split('T')[0],
-      body: newTmplBody.trim(),
+      components: [
+        {
+          type: 'BODY',
+          text: newTmplBody.trim(),
+        },
+      ],
     };
 
-    setTimeout(() => {
-      setTemplates((prev) => [newTemplate, ...prev]);
-      setSelectedTemplate(newTemplate);
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/${META_GRAPH_VERSION}/${META_WABA_ID}/message_templates`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${META_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const resData = await response.json();
+
+      if (resData.error) {
+        throw new Error(resData.error.message);
+      }
+
+      alert(
+        `Berhasil! Template "${formattedName}" telah diajukan ke Meta (ID: ${resData.id}). Status saat ini: PENDING.`
+      );
       setNewTmplName('');
       setNewTmplBody('');
       setShowCreateModal(false);
+      fetchMetaTemplates();
+    } catch (err) {
+      alert('Gagal mengajukan template ke Meta: ' + err.message);
+    } finally {
       setIsSubmitting(false);
-      alert(`Template "${formattedName}" berhasil diajukan ke Meta untuk ditinjau (Status: PENDING).`);
-    }, 800);
+    }
   };
 
   // Filter Lokal
   const filteredTemplates = templates.filter((t) => {
-    const matchCategory = selectedCategory === 'ALL' || t.category === selectedCategory;
-    const matchSearch = t.name.toLowerCase().includes(searchTerm.toLowerCase()) || t.body.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchCategory =
+      selectedCategory === 'ALL' || t.category === selectedCategory;
+    const matchSearch =
+      t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.body.toLowerCase().includes(searchTerm.toLowerCase());
     return matchCategory && matchSearch;
   });
 
@@ -143,24 +171,49 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
       {/* Title Bar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Manajemen Template Siaran (Meta HSM)</h1>
+          <h1 className="text-2xl font-bold text-slate-800">
+            Manajemen Template Siaran (Meta HSM)
+          </h1>
           <p className="text-slate-500 text-sm">
-            Status persetujuan, pengajuan, dan pengujian pesan template resmi Meta WhatsApp Cloud API
+            Status persetujuan, pengajuan, dan pengujian template langsung dari WhatsApp Cloud API
           </p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition shadow-sm"
-        >
-          + Ajukan Template Baru
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchMetaTemplates}
+            className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg text-xs font-semibold transition border border-slate-300"
+            title="Segarkan data dari Meta"
+          >
+            🔄 Sync Meta
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition shadow-sm"
+          >
+            + Ajukan Template Baru
+          </button>
+        </div>
       </div>
+
+      {/* Warning jika Token Belum Dipasang */}
+      {META_ACCESS_TOKEN.includes('ISIKAN_PERMANENT') && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl mb-6 text-xs leading-relaxed">
+          <strong>💡 Catatan Integrasi:</strong> Untuk terhubung ke server Meta, pastikan Anda telah memasukkan <strong>Permanent Meta Access Token</strong> pada variabel <code>META_ACCESS_TOKEN</code> di dalam file <code>TemplatesPage.jsx</code>.
+        </div>
+      )}
+
+      {/* Error Alert */}
+      {errorMsg && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl mb-6 text-xs font-medium">
+          ❌ Meta API Connection Error: {errorMsg}
+        </div>
+      )}
 
       {/* Filter & Search Bar */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4 justify-between items-center">
         <input
           type="text"
-          placeholder="Cari nama atau isi template..."
+          placeholder="Cari nama atau isi template Meta..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full md:w-96 border border-slate-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -173,7 +226,9 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
               onClick={() => setSelectedCategory(cat)}
               className={
                 'px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ' +
-                (selectedCategory === cat ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')
+                (selectedCategory === cat
+                  ? 'bg-slate-800 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200')
               }
             >
               {cat}
@@ -184,13 +239,15 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
 
       {/* Main Grid Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Kolom Kiri: Daftar Template Meta */}
+        {/* Kolom Kiri: Daftar Template dari Meta */}
         <div className="lg:col-span-2 space-y-3">
           {loading ? (
-            <p className="text-slate-400 text-sm py-8 text-center bg-white rounded-xl border p-4">Memuat daftar template...</p>
+            <div className="text-slate-400 text-sm py-12 text-center bg-white rounded-xl border p-4">
+              Menghubungkan ke Meta Cloud API...
+            </div>
           ) : filteredTemplates.length === 0 ? (
             <div className="text-center py-12 text-slate-400 text-sm bg-white rounded-xl border p-4">
-              <p>Tidak ada template yang cocok.</p>
+              Tidak ada template yang ditemukan di akun WABA Anda.
             </div>
           ) : (
             filteredTemplates.map((tmpl) => {
@@ -200,22 +257,27 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
                   key={tmpl.id}
                   onClick={() => setSelectedTemplate(tmpl)}
                   className={`p-4 rounded-xl border bg-white transition cursor-pointer flex flex-col justify-between gap-3 ${
-                    isSelected ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md' : 'border-slate-200 hover:border-slate-300'
+                    isSelected
+                      ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
+                      : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
                   <div className="flex justify-between items-start gap-2">
                     <div>
-                      <h3 className="font-bold text-slate-800 text-sm font-mono">{tmpl.name}</h3>
+                      <h3 className="font-bold text-slate-800 text-sm font-mono">
+                        {tmpl.name}
+                      </h3>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600">
                           {tmpl.category}
                         </span>
-                        <span className="text-xs text-slate-400">• Bahasa: {tmpl.language.toUpperCase()}</span>
-                        <span className="text-xs text-slate-400">• Tgl: {tmpl.created_at}</span>
+                        <span className="text-xs text-slate-400">
+                          • Bahasa: {tmpl.language.toUpperCase()}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Status Badge */}
+                    {/* Status Badge Meta */}
                     <span
                       className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase border ${
                         tmpl.status === 'APPROVED'
@@ -233,7 +295,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
                     </span>
                   </div>
 
-                  <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-100 font-sans">
+                  <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-100 font-sans">
                     {tmpl.body}
                   </p>
                 </div>
@@ -253,10 +315,14 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
               {/* Dynamic Variable Inputs */}
               {Object.keys(variables).length > 0 && (
                 <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase block">Isi Variabel Uji Coba:</span>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase block">
+                    Isi Variabel Uji Coba:
+                  </span>
                   {Object.keys(variables).map((placeholder) => (
                     <div key={placeholder} className="flex items-center gap-2">
-                      <span className="text-xs font-mono font-bold text-emerald-700 w-10">{placeholder}</span>
+                      <span className="text-xs font-mono font-bold text-emerald-700 w-10">
+                        {placeholder}
+                      </span>
                       <input
                         type="text"
                         value={variables[placeholder]}
@@ -311,18 +377,22 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
         </div>
       </div>
 
-      {/* Modal 1: Ajukan Template Baru */}
+      {/* Modal: Ajukan Template Baru */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-lg w-full p-5 shadow-2xl">
-            <h3 className="font-bold text-slate-800 text-base mb-1">Ajukan Template Siaran Baru (Meta HSM)</h3>
+            <h3 className="font-bold text-slate-800 text-base mb-1">
+              Ajukan Template Siaran Baru ke Meta
+            </h3>
             <p className="text-slate-500 text-xs mb-4">
-              Template akan dikirimkan ke pihak Meta untuk peninjauan otomatis (proses 1 - 24 jam).
+              Template akan dikirim langsung ke WhatsApp Cloud API untuk proses tinjauan otomatis Meta.
             </p>
 
             <form onSubmit={handleCreateTemplate} className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Template (Huruf Kecil & Underscore) *</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Nama Template (Huruf Kecil & Underscore) *
+                </label>
                 <input
                   type="text"
                   required
@@ -335,7 +405,9 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Kategori *</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    Kategori *
+                  </label>
                   <select
                     value={newTmplCategory}
                     onChange={(e) => setNewTmplCategory(e.target.value)}
@@ -346,7 +418,9 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Bahasa *</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    Bahasa *
+                  </label>
                   <select
                     value={newTmplLanguage}
                     onChange={(e) => setNewTmplLanguage(e.target.value)}
