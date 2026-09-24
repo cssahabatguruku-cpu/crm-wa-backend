@@ -26,7 +26,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState(null);
 
-  // State Pemetaan Variabel: { "{{1}}": "name", "{{2}}": "institution" }
+  // State Pemetaan Variabel
   const [mappings, setMappings] = useState({});
 
   // States Modal Ajukan Template Baru
@@ -35,7 +35,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
   const [newTmplCategory, setNewTmplCategory] = useState('UTILITY');
   const [newTmplLanguage, setNewTmplLanguage] = useState('id');
   const [newTmplBody, setNewTmplBody] = useState('');
-  const [varSamples, setVarSamples] = useState({}); // { 1: "Ahmad", 2: "Acara Webinar" }
+  const [varSamples, setVarSamples] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 1. Fetch Template Langsung dari Server Meta Graph API
@@ -49,7 +49,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
       const result = await response.json();
 
       if (result.error) {
-        throw new Error(result.error.message || 'Gagal terhubung ke Meta Graph API.');
+        throw new Error(result.error.error_user_msg || result.error.message || 'Gagal terhubung ke Meta API.');
       }
 
       const formatted = (result.data || []).map((item) => {
@@ -97,7 +97,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
     }
   }, [selectedTemplate]);
 
-  // Deteksi Variabel Dinamis pada Modal Pengajuan Baru
+  // Sync Input Contoh Variabel Saat User Mengetik Pesan
   useEffect(() => {
     const rawMatches = newTmplBody.match(/\{\{\d+\}\}/g) || [];
     const uniqueNums = Array.from(
@@ -107,14 +107,14 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
     const updatedSamples = { ...varSamples };
     uniqueNums.forEach((num) => {
       if (!updatedSamples[num]) {
-        updatedSamples[num] = num === 1 ? 'Ahmad' : num === 2 ? 'Undangan Webinar' : `Nilai ${num}`;
+        updatedSamples[num] = num === 1 ? 'Ahmad' : num === 2 ? 'SD Al Husna' : `Nilai ${num}`;
       }
     });
 
     setVarSamples(updatedSamples);
   }, [newTmplBody]);
 
-  // 3. Render Pratinjau Teks Pesan Menggunakan Contoh Data Field
+  // 3. Render Pratinjau Teks Pesan
   const getRenderedPreview = () => {
     if (!selectedTemplate) return '';
     let rendered = selectedTemplate.body;
@@ -133,7 +133,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
     return rendered;
   };
 
-  // 4. Ajukan Template Baru ke Meta Graph API
+  // 4. Ajukan Template Baru ke Meta Graph API (Validasi Diperketat)
   const handleCreateTemplate = async (e) => {
     e.preventDefault();
     if (!newTmplName.trim() || !newTmplBody.trim()) return;
@@ -154,28 +154,35 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
     // Validasi Urutan Variabel
     if (varNumbers.length > 0) {
       if (varNumbers[0] !== 1) {
-        alert('Meta mewajibkan variabel dimulai dari {{1}}!');
+        alert('Variabel wajib dimulai dari {{1}}!');
         setIsSubmitting(false);
         return;
       }
       for (let i = 0; i < varNumbers.length; i++) {
         if (varNumbers[i] !== i + 1) {
-          alert(`Meta mewajibkan nomor variabel berurutan tanpa lompatan (Ditemukan: {{${varNumbers[i]}}}, Seharusnya: {{${i + 1}}}).`);
+          alert(`Nomor variabel harus berurutan tanpa lompatan (Seharusnya {{${i + 1}}}).`);
           setIsSubmitting(false);
           return;
         }
       }
     }
 
+    let finalBodyText = newTmplBody.trim();
+
+    // Auto-fix Meta Rule: Jika diakhiri variabel {{x}}, tambahkan titik di akhir
+    if (/\{\{\d+\}\}$/.test(finalBodyText)) {
+      finalBodyText += '.';
+    }
+
     const bodyComponent = {
       type: 'BODY',
-      text: newTmplBody.trim(),
+      text: finalBodyText,
     };
 
     // Sertakan parameter example.body_text jika ada variabel
     if (varNumbers.length > 0) {
-      const sampleValuesArr = varNumbers.map(
-        (num) => varSamples[num] || `Contoh ${num}`
+      const sampleValuesArr = varNumbers.map((num) =>
+        String(varSamples[num] || `Contoh ${num}`).trim()
       );
       bodyComponent.example = {
         body_text: [sampleValuesArr],
@@ -205,17 +212,21 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
       const resData = await response.json();
 
       if (resData.error) {
-        throw new Error(resData.error.message || 'Gagal mengajukan template');
+        const detailMsg =
+          resData.error.error_user_msg ||
+          resData.error.error_data?.details ||
+          resData.error.message;
+        throw new Error(detailMsg);
       }
 
-      alert(`Berhasil! Template "${formattedName}" telah diajukan ke Meta (ID: ${resData.id}).`);
+      alert(`Berhasil! Template "${formattedName}" telah terkirim ke Meta (ID: ${resData.id}).`);
       setNewTmplName('');
       setNewTmplBody('');
       setVarSamples({});
       setShowCreateModal(false);
       fetchMetaTemplates();
     } catch (err) {
-      alert('Gagal mengajukan template ke Meta: ' + err.message);
+      alert('Gagal mengajukan template ke Meta:\n' + err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -458,19 +469,19 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
             <h3 className="font-bold text-slate-800 text-base mb-1">
               Ajukan Template Siaran Baru ke Meta
             </h3>
-            <p className="text-slate-500 text-xs mb-4">
+            <p className="text-slate-500 text-xs mb-3">
               Template akan dikirim langsung ke WhatsApp Cloud API untuk proses tinjauan otomatis Meta.
             </p>
 
             <form onSubmit={handleCreateTemplate} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  Nama Template (Huruf Kecil & Underscore) *
+                  Nama Template Unik (Huruf Kecil & Underscore) *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="contoh: undangan_webinar_guru"
+                  placeholder="contoh: undangan_webinar_v2"
                   value={newTmplName}
                   onChange={(e) => setNewTmplName(e.target.value)}
                   className="w-full border border-slate-300 rounded-lg p-2 text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
@@ -513,14 +524,17 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
                 <textarea
                   required
                   rows="4"
-                  placeholder="Selamat pagi pak {{1}}, izin mengirimkan undangan untuk {{2}}"
+                  placeholder="Selamat pagi pak {{1}}, izin mengirimkan undangan untuk {{2}}."
                   value={newTmplBody}
                   onChange={(e) => setNewTmplBody(e.target.value)}
                   className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none leading-relaxed"
                 ></textarea>
+                <p className="text-[10px] text-amber-700 bg-amber-50 p-2 rounded border border-amber-200 mt-1">
+                  💡 <strong>Aturan Meta:</strong> Akhiri pesan dengan tanda titik <code>.</code> setelah variabel terakhir (misal: <code>... untuk {{2}}.</code>) agar tidak ditolak sistem Meta.
+                </p>
               </div>
 
-              {/* Form Input Contoh Variabel (Wajib untuk Meta Review) */}
+              {/* Form Input Contoh Variabel */}
               {uniqueVarNumbersInModal.length > 0 && (
                 <div className="bg-emerald-50/70 border border-emerald-200 p-3 rounded-xl space-y-2">
                   <span className="text-xs font-bold text-emerald-800 block">
