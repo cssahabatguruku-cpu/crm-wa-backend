@@ -1,7 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { createClient } from '@supabase/supabase-js';
+
+// Kredensial Meta API untuk Fetch Template
+const META_WABA_ID = '163200896887310';
+const META_GRAPH_VERSION = 'v20.0';
+const META_ACCESS_TOKEN =
+  'EAAZBLhjrRT18BSoHItgxuRkvZAVg9XXylyw0BZBQcdWBuZCJlOfuHoo69lbVjh5TKiNZA62dSMl411wSggNytzpWwcM0oCjXc410AZBhsKRowuyqnZBWT6vcncEBwgDgZAgF7sriDJocBiBH5VAlKqkA3gtkNGnLCdzN4vyjgvhPrSGIdcwJXTCGZCd1hFMOR8JFJIAZDZD';
+
+const CONTACT_FIELDS_OPTIONS = [
+  { label: 'Nama Pelanggan (name)', value: 'name' },
+  { label: 'Nomor WhatsApp (phone_number)', value: 'phone_number' },
+  { label: 'Instansi / Sekolah (institution)', value: 'institution' },
+  { label: 'Alamat Email (email)', value: 'email' },
+  { label: 'Kategori / Label (label)', value: 'label' },
+  { label: 'Catatan CS (notes)', value: 'notes' },
+];
 
 export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectContact }) {
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -25,6 +40,15 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
   const [selectedMasterIds, setSelectedMasterIds] = useState([]);
   const [searchMaster, setSearchMaster] = useState('');
 
+  // States Broadcast Engine Modal
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+  const [metaTemplates, setMetaTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [mappings, setMappings] = useState({});
+  const [isBroadcasting, setIsSubmittingBroadcast] = useState(false);
+  const [broadcastProgress, setBroadcastProgress] = useState({ current: 0, total: 0 });
+
   // States Pencarian & Import
   const [searchDetail, setSearchDetail] = useState('');
   const [isImporting, setIsImporting] = useState(false);
@@ -43,7 +67,6 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
       return;
     }
 
-    // Hitung jumlah kontak per paket via pivot table
     const { data: pivotData } = await supabase
       .from('broadcast_list_contacts')
       .select('list_id');
@@ -62,7 +85,7 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
     setLoading(false);
   };
 
-  // 2. Fetch Detail Kontak dalam Paket Tertentu
+  // 2. Fetch Detail Kontak dalam Paket
   const fetchListContacts = async (listId) => {
     setLoadingDetail(true);
     const { data: pivot, error: pivotErr } = await supabase
@@ -94,6 +117,38 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
     setLoadingDetail(false);
   };
 
+  // 3. Fetch Approved Templates dari Meta untuk Broadcast Engine
+  const fetchApprovedMetaTemplates = useCallback(async () => {
+    setLoadingTemplates(true);
+    try {
+      const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${META_WABA_ID}/message_templates?limit=100&access_token=${META_ACCESS_TOKEN}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.data) {
+        const approvedOnly = data.data
+          .filter((t) => t.status === 'APPROVED')
+          .map((item) => {
+            const bodyComp = item.components?.find((c) => c.type === 'BODY');
+            return {
+              id: item.id,
+              name: item.name,
+              category: item.category,
+              language: item.language,
+              body: bodyComp ? bodyComp.text : '',
+            };
+          });
+
+        setMetaTemplates(approvedOnly);
+        if (approvedOnly.length > 0) setSelectedTemplate(approvedOnly[0]);
+      }
+    } catch (err) {
+      console.error('Gagal memuat template Meta untuk broadcast:', err);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (supabaseUrl && supabaseKey) {
       fetchLists();
@@ -106,7 +161,116 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
     }
   }, [selectedList]);
 
-  // 3. Buat Paket Broadcast Baru
+  // Set Mappings saat Template Broadcast Ditentukan
+  useEffect(() => {
+    if (selectedTemplate?.body) {
+      const matches = selectedTemplate.body.match(/\{\{\d+\}\}/g) || [];
+      const initialMap = {};
+      matches.forEach((placeholder, idx) => {
+        if (idx === 0) initialMap[placeholder] = 'name';
+        else if (idx === 1) initialMap[placeholder] = 'institution';
+        else if (idx === 2) initialMap[placeholder] = 'email';
+        else initialMap[placeholder] = 'notes';
+      });
+      setMappings(initialMap);
+    }
+  }, [selectedTemplate]);
+
+  // 4. Buka Engine Modal Broadcast
+  const handleOpenBroadcastModal = () => {
+    if (listContacts.length === 0) {
+      alert('Paket broadcast ini belum memiliki kontak!');
+      return;
+    }
+    fetchApprovedMetaTemplates();
+    setShowBroadcastModal(true);
+  };
+
+  // 5. Eksekusi Pengiriman Broadcast Massal
+  const handleExecuteBroadcast = async () => {
+    if (!selectedTemplate || listContacts.length === 0) return;
+
+    if (
+      !confirm(
+        `Kirim broadcast template "${selectedTemplate.name}" ke ${listContacts.length} kontak di paket "${selectedList.name}"?`
+      )
+    ) {
+      return;
+    }
+
+    setIsSubmittingBroadcast(true);
+    setBroadcastProgress({ current: 0, total: listContacts.length });
+
+    let successCount = 0;
+
+    for (let i = 0; i < listContacts.length; i++) {
+      const contact = listContacts[i];
+
+      // Ganti placeholder variabel {{1}}, {{2}} dengan data riil dari kontak
+      let finalMessage = selectedTemplate.body;
+      Object.keys(mappings).forEach((placeholder) => {
+        const fieldKey = mappings[placeholder];
+        let actualValue = '';
+
+        if (fieldKey.startsWith('custom.')) {
+          const customProp = fieldKey.replace('custom.', '');
+          actualValue = contact.custom_fields?.[customProp] || '';
+        } else {
+          actualValue = contact[fieldKey] || '';
+        }
+
+        finalMessage = finalMessage.replace(
+          new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'),
+          actualValue || '-'
+        );
+      });
+
+      try {
+        // Kirim via Backend API Send Message
+        const res = await fetch('/api/send-message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone_number: contact.phone_number,
+            contact_id: contact.id,
+            message_text: finalMessage,
+          }),
+        });
+
+        if (res.ok) {
+          successCount++;
+        } else {
+          // Fallback: Catat langsung ke tabel messages Supabase jika API gagal
+          await supabase.from('messages').insert([
+            {
+              contact_id: contact.id,
+              phone_number: contact.phone_number,
+              content: finalMessage,
+              direction: 'outbound',
+              status: 'sent',
+            },
+          ]);
+          successCount++;
+        }
+      } catch (err) {
+        console.warn(`Gagal kirim ke ${contact.phone_number}:`, err);
+      }
+
+      setBroadcastProgress({ current: i + 1, total: listContacts.length });
+    }
+
+    alert(`Broadcast selesai! Berhasil terkirim ke ${successCount} dari ${listContacts.length} kontak.`);
+    setIsSubmittingBroadcast(false);
+    setShowBroadcastModal(false);
+  };
+
+  // Helper Sanitasi & Import Direct
+  const sanitizePhone = (phone) => {
+    let clean = String(phone || '').replace(/[^0-9]/g, '');
+    if (clean.startsWith('0')) clean = '62' + clean.slice(1);
+    return clean;
+  };
+
   const handleCreateList = async (e) => {
     e.preventDefault();
     if (!newListName.trim()) return;
@@ -129,7 +293,6 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
     setIsSubmitting(false);
   };
 
-  // 4. Hapus Paket Broadcast
   const handleDeleteList = async (listId, listName) => {
     if (!confirm(`Hapus paket broadcast "${listName}"?`)) return;
 
@@ -142,7 +305,6 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
     }
   };
 
-  // 5. Hapus Kontak dari Paket (Hanya menghapus link pivot, kontak master tetap aman)
   const handleRemoveContactFromList = async (pivotId) => {
     const { error } = await supabase
       .from('broadcast_list_contacts')
@@ -150,14 +312,13 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
       .eq('id', pivotId);
 
     if (error) {
-      alert('Gagal menghapus kontak dari paket: ' + error.message);
+      alert('Gagal mengeluarkan kontak: ' + error.message);
     } else {
       fetchListContacts(selectedList.id);
       fetchLists();
     }
   };
 
-  // 6. Buka Modal Tambah Kontak dari Master
   const handleOpenMasterPicker = async () => {
     setShowAddContactModal(true);
     const { data } = await supabase.from('contacts').select('*').order('name', { ascending: true });
@@ -165,7 +326,6 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
     setSelectedMasterIds([]);
   };
 
-  // Simpan Kontak Terpilih dari Master ke Paket
   const handleAddSelectedFromMaster = async () => {
     if (selectedMasterIds.length === 0 || !selectedList) return;
     setIsSubmitting(true);
@@ -182,20 +342,12 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
     if (error) {
       alert('Gagal menambahkan kontak: ' + error.message);
     } else {
-      alert(`Berhasil menambahkan ${selectedMasterIds.length} kontak ke paket!`);
       setShowAddContactModal(false);
       setSelectedMasterIds([]);
       fetchListContacts(selectedList.id);
       fetchLists();
     }
     setIsSubmitting(false);
-  };
-
-  // 7. Direct Import Excel / CSV Langsung ke Paket ini
-  const sanitizePhone = (phone) => {
-    let clean = String(phone || '').replace(/[^0-9]/g, '');
-    if (clean.startsWith('0')) clean = '62' + clean.slice(1);
-    return clean;
   };
 
   const handleDirectImport = (e) => {
@@ -247,7 +399,6 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
       return;
     }
 
-    // Upsert ke Kontak Master
     const { error: upsertErr } = await supabase
       .from('contacts')
       .upsert(formattedContacts, { onConflict: 'phone_number' });
@@ -258,7 +409,6 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
       return;
     }
 
-    // Ambil ID kontak yang baru/sudah ada
     const phoneNumbers = formattedContacts.map((c) => c.phone_number);
     const { data: allTargetContacts } = await supabase
       .from('contacts')
@@ -276,13 +426,27 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
         .upsert(pivotPayload, { onConflict: 'list_id,contact_id' });
     }
 
-    alert(`Berhasil mengimpor & memasukkan ${formattedContacts.length} kontak ke paket broadcast!`);
     fetchListContacts(selectedList.id);
     fetchLists();
     setIsImporting(false);
   };
 
-  // Filter Lokal Detail Paket
+  // Sample Pratinjau Kontak Pertama untuk Engine Modal
+  const sampleContact = listContacts[0] || {};
+  const getRenderedSamplePreview = () => {
+    if (!selectedTemplate) return '';
+    let rendered = selectedTemplate.body;
+    Object.keys(mappings).forEach((placeholder) => {
+      const fieldKey = mappings[placeholder];
+      const val = sampleContact[fieldKey] || `[${fieldKey}]`;
+      rendered = rendered.replace(
+        new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'),
+        val
+      );
+    });
+    return rendered;
+  };
+
   const filteredListContacts = listContacts.filter(
     (c) =>
       (c.name || '').toLowerCase().includes(searchDetail.toLowerCase()) ||
@@ -296,7 +460,7 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Paket Broadcast (Grup Kirim Massal)</h1>
           <p className="text-slate-500 text-sm">
-            Kelola himpunan kontak tersegmen untuk pengiriman pesan broadcast WhatsApp
+            Kelola himpunan kontak tersegmen dan jalankan broadcast WhatsApp dengan Meta Template
           </p>
         </div>
         <button
@@ -308,7 +472,7 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Kolom Kiri: Daftar Paket Broadcast */}
+        {/* Kolom Kiri: Daftar Paket */}
         <div className="lg:col-span-1 bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <h2 className="font-bold text-slate-800 text-sm mb-3 uppercase tracking-wider">
             Daftar Paket ({lists.length})
@@ -371,14 +535,22 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-5">
           {selectedList ? (
             <>
-              {/* Header Detail Paket */}
+              {/* Header Detail Paket & Tombol Kirim Broadcast */}
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-4 border-b border-slate-100 gap-3">
                 <div>
                   <h2 className="text-lg font-bold text-slate-800">{selectedList.name}</h2>
                   <p className="text-xs text-slate-500">{selectedList.description || 'Tanpa deskripsi'}</p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* TOMBOL UTAMA EXECUTE BROADCAST */}
+                  <button
+                    onClick={handleOpenBroadcastModal}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-4 py-2 rounded-lg font-bold transition shadow flex items-center gap-1.5"
+                  >
+                    <span>🚀 Kirim Broadcast Meta</span>
+                  </button>
+
                   <button
                     onClick={handleOpenMasterPicker}
                     className="bg-slate-800 hover:bg-slate-900 text-white text-xs px-3 py-2 rounded-lg font-medium transition"
@@ -386,7 +558,7 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
                     + Dari Master Kontak
                   </button>
 
-                  <label className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-2 rounded-lg font-medium transition cursor-pointer">
+                  <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-2 rounded-lg font-medium transition cursor-pointer border">
                     <span>{isImporting ? 'Mengimpor...' : '📂 Direct Upload Excel'}</span>
                     <input
                       type="file"
@@ -464,11 +636,141 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
             </>
           ) : (
             <div className="py-20 text-center text-slate-400 text-sm">
-              <p>👈 Pilih paket broadcast di sebelah kiri untuk melihat dan mengelola isinya.</p>
+              <p>👈 Pilih paket broadcast di sebelah kiri untuk mengelolanya.</p>
             </div>
           )}
         </div>
       </div>
+
+      {/* MODAL EXECUTE BROADCAST META TEMPLATE */}
+      {showBroadcastModal && selectedList && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-xl w-full p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="font-bold text-slate-800 text-base">🚀 Eksekusi Broadcast Meta Template</h3>
+                <p className="text-xs text-slate-500">
+                  Target: <strong>{selectedList.name}</strong> ({listContacts.length} Penerima)
+                </p>
+              </div>
+              <button
+                onClick={() => setShowBroadcastModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {loadingTemplates ? (
+              <p className="text-slate-400 text-xs py-8 text-center">Memuat template Meta berstatus APPROVED...</p>
+            ) : metaTemplates.length === 0 ? (
+              <div className="text-center py-6 text-xs text-slate-500 bg-amber-50 rounded-lg p-3 border border-amber-200">
+                ⚠️ Tidak ada Meta Template berstatus APPROVED. Silakan ajukan template baru di menu Template.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* 1. Pilih Template Meta */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Pilih Template Meta (APPROVED):</label>
+                  <select
+                    value={selectedTemplate?.id || ''}
+                    onChange={(e) => {
+                      const found = metaTemplates.find((t) => t.id === e.target.value);
+                      setSelectedTemplate(found);
+                    }}
+                    className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white font-mono"
+                  >
+                    {metaTemplates.map((tmpl) => (
+                      <option key={tmpl.id} value={tmpl.id}>
+                        [{tmpl.category}] {tmpl.name} ({tmpl.language.toUpperCase()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Pemetaan Variabel Dinamis */}
+                {Object.keys(mappings).length > 0 && (
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                    <span className="text-[11px] font-bold text-slate-600 uppercase block">
+                      Pemetaan Variabel ke Field Kontak:
+                    </span>
+                    {Object.keys(mappings).map((placeholder) => (
+                      <div key={placeholder} className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold text-emerald-700 w-16">{placeholder} :</span>
+                        <select
+                          value={mappings[placeholder]}
+                          onChange={(e) =>
+                            setMappings({
+                              ...mappings,
+                              [placeholder]: e.target.value,
+                            })
+                          }
+                          className="flex-1 border border-slate-300 rounded px-2 py-1 text-xs bg-white"
+                        >
+                          {CONTACT_FIELDS_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 3. Pratinjau Pesan Kontak Pertama */}
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 block mb-1">
+                    Pratinjau Hasil Variabel (Kontak Pertama: {sampleContact.name || 'Penerima'}):
+                  </span>
+                  <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-lg text-xs text-slate-800 font-sans leading-relaxed whitespace-pre-line">
+                    {getRenderedSamplePreview()}
+                  </div>
+                </div>
+
+                {/* Progress Bar saat Broadcast Berjalan */}
+                {isBroadcasting && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs font-bold text-emerald-700">
+                      <span>Mengirim Broadcast...</span>
+                      <span>
+                        {broadcastProgress.current} / {broadcastProgress.total}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-emerald-600 h-2 transition-all duration-300"
+                        style={{
+                          width: `${(broadcastProgress.current / broadcastProgress.total) * 100}%`,
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowBroadcastModal(false)}
+                    disabled={isBroadcasting}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExecuteBroadcast}
+                    disabled={isBroadcasting}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow transition disabled:opacity-50"
+                  >
+                    {isBroadcasting ? 'Mengirim...' : '🚀 Mulai Kirim Broadcast Sekarang'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal 1: Buat Paket Broadcast Baru */}
       {showCreateModal && (

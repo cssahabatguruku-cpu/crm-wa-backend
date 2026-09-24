@@ -68,6 +68,7 @@ export default function App() {
     setTimeout(() => setNotification(null), 4000);
   };
 
+  // 1. Clean Inbox Fetch: HANYA TAMPILKAN KONTAK YANG PERNAH MEMBALAS (ADA PESAN INBOUND)
   const fetchActiveChats = useCallback(async () => {
     try {
       const { data: contactsData, error: cErr } = await supabase.from('contacts').select('*');
@@ -82,18 +83,26 @@ export default function App() {
 
       const messageMap = {};
       const unreadMap = {};
+      const contactsWithInbound = new Set();
 
       (messagesData || []).forEach((msg) => {
+        // Tandai jika kontak pernah mengirimkan balasan (inbound)
+        if (msg.direction === 'inbound') {
+          contactsWithInbound.add(msg.contact_id);
+        }
+
         if (!messageMap[msg.contact_id]) {
           messageMap[msg.contact_id] = msg;
         }
+
         if (msg.direction === 'inbound' && msg.status !== 'read') {
           unreadMap[msg.contact_id] = (unreadMap[msg.contact_id] || 0) + 1;
         }
       });
 
+      // Filter: Hanya sertakan kontak yang memiliki balasan inbound
       const activeContacts = (contactsData || [])
-        .filter((c) => messageMap[c.id])
+        .filter((c) => contactsWithInbound.has(c.id))
         .map((c) => {
           const isCurrentlySelected = selectedContactRef.current?.id === c.id;
           return {
@@ -281,7 +290,7 @@ export default function App() {
           </div>
 
           <button
-            title="Kotak Masuk Chat"
+            title="Kotak Masuk Chat (Respon Pelanggan)"
             onClick={() => setCurrentView('chat')}
             className={
               'p-3 rounded-xl transition ' +
@@ -303,7 +312,7 @@ export default function App() {
           </button>
 
           <button
-            title="Paket & List Broadcast"
+            title="Paket & Riwayat Broadcast"
             onClick={() => setCurrentView('broadcast')}
             className={
               'p-3 rounded-xl transition font-bold text-base ' +
@@ -374,7 +383,7 @@ export default function App() {
         />
       ) : (
         <>
-          {/* Kolom Daftar Kontak Kiri */}
+          {/* Kolom Daftar Obrolan Kiri */}
           <div
             className={
               (selectedContact ? 'hidden md:flex' : 'flex') +
@@ -426,7 +435,7 @@ export default function App() {
                 </div>
                 <input
                   type="text"
-                  placeholder="Cari percakapan..."
+                  placeholder="Cari obrolan yang membalas..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -441,26 +450,23 @@ export default function App() {
                   key={tab}
                   onClick={() => setActiveFilterTab(tab)}
                   className={
-                    'px-3 py-1 rounded-full font-medium whitespace-nowrap transition ' +
+                    'px-3.5 py-1 rounded-full font-medium whitespace-nowrap transition ' +
                     (activeFilterTab === tab ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')
                   }
                 >
-                  {tab === 'all' ? 'Semua Obrolan' : tab}
+                  {tab === 'all' ? 'Respon Pelanggan' : tab}
                 </button>
               ))}
             </div>
 
-            {/* Daftar Kontak dengan Cuplikan Chat & Unread Badge */}
+            {/* Daftar Obrolan (Hanya Pelanggan yang Membalas) */}
             <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
               {filteredContacts.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 text-xs md:text-sm">
-                  <p>Belum ada percakapan aktif.</p>
-                  <button
-                    onClick={() => setCurrentView('contacts')}
-                    className="mt-2 text-xs font-semibold text-emerald-600 hover:underline"
-                  >
-                    + Mulai Obrolan dari Master Kontak
-                  </button>
+                  <p>Belum ada pelanggan yang membalas.</p>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Pesan broadcast tidak mengotori inbox ini sampai pelanggan mengirimkan balasan.
+                  </p>
                 </div>
               ) : (
                 filteredContacts.map((contact) => {
