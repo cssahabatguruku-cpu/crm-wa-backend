@@ -44,7 +44,32 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
     return clean;
   };
 
-  // 2. Handle Import File Excel / CSV
+  // 2. Unduh Template Excel Contoh
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        Nama: 'Ahmad Supardi',
+        'No WA': '081234567890',
+        Kategori: 'Guru',
+        Instansi: 'SMA 1 Kudus',
+        Email: 'ahmad@example.com',
+      },
+      {
+        Nama: 'Budi Santoso',
+        'No WA': '6289876543210',
+        Kategori: 'Alumni',
+        Instansi: 'Universitas X',
+        Email: 'budi@example.com',
+      },
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template Kontak');
+    XLSX.writeFile(workbook, 'Template_Import_Kontak_CRM.xlsx');
+  };
+
+  // 3. Handle Import File Excel / CSV
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -56,7 +81,7 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        complete: (results) => processAndSaveImport(results.data)
+        complete: (results) => processAndSaveImport(results.data),
       });
     } else {
       const reader = new FileReader();
@@ -70,22 +95,34 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
       };
       reader.readAsBinaryString(file);
     }
+
+    // Reset value agar bisa upload ulang file yang sama jika diperlukan
+    e.target.value = null;
   };
 
-  // 3. Simpan / Upsert Data ke Supabase (Kolom: phone_number)
+  // 4. Simpan / Upsert Data ke Supabase (Kolom: phone_number)
   const processAndSaveImport = async (rawData) => {
-    const formattedData = rawData.map(row => {
-      const rawPhone = row.Phone || row.phone || row['No WA'] || row.WhatsApp || row.phone_number || '';
-      const cleanPhone = sanitizePhone(rawPhone);
+    const formattedData = rawData
+      .map((row) => {
+        const rawPhone =
+          row.Phone ||
+          row.phone ||
+          row['No WA'] ||
+          row['no wa'] ||
+          row.WhatsApp ||
+          row.phone_number ||
+          '';
+        const cleanPhone = sanitizePhone(rawPhone);
 
-      return {
-        phone_number: cleanPhone,
-        name: row.Name || row.name || row.Nama || 'Tanpa Nama',
-        label: row.Label || row.label || row.Kategori || 'General',
-        institution: row.Institution || row.instansi || row.Sekolah || '',
-        email: row.Email || row.email || ''
-      };
-    }).filter(item => item.phone_number.length >= 10);
+        return {
+          phone_number: cleanPhone,
+          name: row.Name || row.name || row.Nama || row.nama || 'Tanpa Nama',
+          label: row.Label || row.label || row.Kategori || row.kategori || 'General',
+          institution: row.Institution || row.instansi || row.Instansi || row.Sekolah || '',
+          email: row.Email || row.email || '',
+        };
+      })
+      .filter((item) => item.phone_number.length >= 10);
 
     if (formattedData.length === 0) {
       alert('Tidak ada data kontak valid yang ditemukan pada file.');
@@ -111,35 +148,55 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
     if (selectedContactIds.length === filteredContacts.length) {
       setSelectedContactIds([]);
     } else {
-      setSelectedContactIds(filteredContacts.map(c => c.id));
+      setSelectedContactIds(filteredContacts.map((c) => c.id));
     }
   };
 
   const toggleSelectOne = (id) => {
-    setSelectedContactIds(prev =>
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    setSelectedContactIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
 
   // Filtering Lokal (Search Nama, Nomor, Instansi)
-  const filteredContacts = contacts.filter(c =>
-    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.phone_number || '').includes(searchTerm) ||
-    (c.institution || '').toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredContacts = contacts.filter(
+    (c) =>
+      (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.phone_number || '').includes(searchTerm) ||
+      (c.institution || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <div className="flex-1 p-6 bg-slate-50 min-h-screen overflow-y-auto">
-      {/* Title Bar */}
+      {/* Title Bar & Action Buttons */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Master Data Kontak</h1>
-          <p className="text-slate-500 text-sm">Kelola seluruh database kontak pelanggan dan filter untuk broadcast</p>
+          <p className="text-slate-500 text-sm">
+            Kelola seluruh database kontak pelanggan dan filter untuk broadcast
+          </p>
         </div>
-        <div>
-          <label className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg cursor-pointer font-medium text-sm transition">
+
+        <div className="flex items-center gap-2">
+          {/* Tombol Unduh Template */}
+          <button
+            onClick={handleDownloadTemplate}
+            className="flex items-center gap-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 px-3.5 py-2 rounded-lg font-medium text-sm transition border border-slate-300"
+            title="Download Format Template Excel"
+          >
+            <span>📥 Template Excel</span>
+          </button>
+
+          {/* Tombol Import Excel */}
+          <label className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg cursor-pointer font-medium text-sm transition shadow-sm">
             <span>{isImporting ? 'Mengimpor...' : '📂 Import Excel / CSV'}</span>
-            <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handleFileUpload} disabled={isImporting} />
+            <input
+              type="file"
+              accept=".xlsx, .xls, .csv"
+              className="hidden"
+              onChange={handleFileUpload}
+              disabled={isImporting}
+            />
           </label>
         </div>
       </div>
@@ -174,7 +231,11 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
             <strong>{selectedContactIds.length}</strong> kontak dipilih
           </span>
           <button
-            onClick={() => alert(`Fitur tambah ${selectedContactIds.length} kontak ke paket broadcast akan dihubungkan di halaman BroadcastListsPage`)}
+            onClick={() =>
+              alert(
+                `Fitur tambah ${selectedContactIds.length} kontak ke paket broadcast akan dihubungkan di halaman BroadcastListsPage`
+              )
+            }
             className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-lg"
           >
             + Masukkan ke Paket Broadcast
@@ -190,7 +251,10 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
               <th className="p-4 w-10">
                 <input
                   type="checkbox"
-                  checked={selectedContactIds.length === filteredContacts.length && filteredContacts.length > 0}
+                  checked={
+                    selectedContactIds.length === filteredContacts.length &&
+                    filteredContacts.length > 0
+                  }
                   onChange={toggleSelectAll}
                   className="rounded text-emerald-600 focus:ring-emerald-500"
                 />
@@ -205,11 +269,15 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
           <tbody className="divide-y divide-slate-100 text-sm">
             {loading ? (
               <tr>
-                <td colSpan="6" className="text-center p-8 text-slate-400">Memuat data kontak...</td>
+                <td colSpan="6" className="text-center p-8 text-slate-400">
+                  Memuat data kontak...
+                </td>
               </tr>
             ) : filteredContacts.length === 0 ? (
               <tr>
-                <td colSpan="6" className="text-center p-8 text-slate-400">Tidak ada kontak yang ditemukan.</td>
+                <td colSpan="6" className="text-center p-8 text-slate-400">
+                  Tidak ada kontak yang ditemukan.
+                </td>
               </tr>
             ) : (
               filteredContacts.map((contact) => (
@@ -222,7 +290,9 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
                       className="rounded text-emerald-600 focus:ring-emerald-500"
                     />
                   </td>
-                  <td className="p-4 font-medium text-slate-800">{contact.name || 'Tanpa Nama'}</td>
+                  <td className="p-4 font-medium text-slate-800">
+                    {contact.name || 'Tanpa Nama'}
+                  </td>
                   <td className="p-4 text-slate-600">+{contact.phone_number}</td>
                   <td className="p-4">
                     <span className="bg-slate-100 text-slate-700 text-xs px-2.5 py-1 rounded-full border border-slate-200 font-medium">
@@ -232,7 +302,9 @@ export default function ContactsPage({ supabaseUrl, supabaseKey, onSelectContact
                   <td className="p-4 text-slate-500">{contact.institution || '-'}</td>
                   <td className="p-4 text-center">
                     <button
-                      onClick={() => onSelectContact && onSelectContact(contact.phone_number)}
+                      onClick={() =>
+                        onSelectContact && onSelectContact(contact.phone_number)
+                      }
                       className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs px-3 py-1.5 rounded-lg border border-emerald-200 font-medium"
                     >
                       💬 Buka Chat

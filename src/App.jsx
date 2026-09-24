@@ -3,6 +3,7 @@ import TemplateModal from './components/modals/TemplateModal';
 import BillingModal from './components/modals/BillingModal';
 import ContactModal from './components/modals/ContactModal';
 import ContactsPage from './pages/ContactsPage';
+import BroadcastListsPage from './pages/BroadcastListsPage';
 import {
   SendIcon,
   ArrowLeftIcon,
@@ -24,7 +25,7 @@ const DEFAULT_SUPABASE_ANON_KEY =
 const DEFAULT_API_URL = '/api/send-message';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState('chat'); // 'chat' | 'contacts'
+  const [currentView, setCurrentView] = useState('chat'); // 'chat' | 'contacts' | 'broadcast'
   const [contacts, setContacts] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -201,12 +202,12 @@ export default function App() {
 
       {/* Mini Desktop Sidebar Navigasi Utama */}
       <div className="hidden md:flex w-16 bg-slate-900 flex-col items-center py-4 justify-between border-r border-slate-800 shrink-0">
-        <div className="flex flex-col items-center gap-6">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shadow-lg">
+        <div className="flex flex-col items-center gap-5">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shadow-lg mb-2">
             SG
           </div>
 
-          {/* Tombol Kotak Masuk (Chat) */}
+          {/* 1. Menu Obrolan (Chat) */}
           <button
             title="Kotak Masuk Chat"
             onClick={() => setCurrentView('chat')}
@@ -220,7 +221,7 @@ export default function App() {
             <InboxIcon />
           </button>
 
-          {/* Tombol Master Data Kontak */}
+          {/* 2. Menu Master Data Kontak */}
           <button
             title="Master Data Kontak & Import Excel"
             onClick={() => setCurrentView('contacts')}
@@ -234,7 +235,21 @@ export default function App() {
             <UserIcon />
           </button>
 
-          {/* Tombol Template Broadcast */}
+          {/* 3. Menu Paket Broadcast Massal */}
+          <button
+            title="Paket & List Broadcast"
+            onClick={() => setCurrentView('broadcast')}
+            className={
+              'p-3 rounded-xl transition font-bold text-base ' +
+              (currentView === 'broadcast'
+                ? 'text-emerald-400 bg-slate-800 shadow'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800')
+            }
+          >
+            📢
+          </button>
+
+          {/* 4. Menu Template Meta */}
           <button
             title="Template Broadcast Meta (HSM)"
             onClick={() => setShowTemplateModal(true)}
@@ -243,7 +258,7 @@ export default function App() {
             <FileTextIcon />
           </button>
 
-          {/* Tombol Saldo Meta */}
+          {/* 5. Menu Saldo Meta */}
           <button
             title="Saldo & Tagihan Meta WABA"
             onClick={() => setShowBillingModal(true)}
@@ -254,7 +269,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* MAIN VIEW AREA: TAMPILAN DASHBOARD KONTAK ATAU CHAT */}
+      {/* MAIN VIEW ROUTING: CHAT | CONTACTS DASHBOARD | BROADCAST LISTS */}
       {currentView === 'contacts' ? (
         <ContactsPage
           supabaseUrl={DEFAULT_SUPABASE_URL}
@@ -269,9 +284,23 @@ export default function App() {
             setCurrentView('chat');
           }}
         />
+      ) : currentView === 'broadcast' ? (
+        <BroadcastListsPage
+          supabaseUrl={DEFAULT_SUPABASE_URL}
+          supabaseKey={DEFAULT_SUPABASE_ANON_KEY}
+          onSelectContact={(phoneNumber) => {
+            const found = contacts.find((c) => c.phone_number === phoneNumber);
+            if (found) {
+              setSelectedContact(found);
+            } else {
+              setSelectedContact({ phone_number: phoneNumber, name: phoneNumber });
+            }
+            setCurrentView('chat');
+          }}
+        />
       ) : (
         <>
-          {/* Kolom Daftar Kontak Kiri (Tampilan Chat Mode) */}
+          {/* Kolom Daftar Kontak Kiri (Mode Chat Input) */}
           <div
             className={
               (selectedContact ? 'hidden md:flex' : 'flex') +
@@ -407,12 +436,12 @@ export default function App() {
               )}
             </div>
 
-            {/* Mobile Bottom Bar */}
+            {/* Mobile Bottom Bar Navigasi */}
             <div className="md:hidden border-t border-slate-200 bg-white p-2 flex justify-around items-center shrink-0">
               <button
                 onClick={() => setCurrentView('chat')}
                 className={
-                  'flex flex-col items-center gap-1 py-1 px-3 transition ' +
+                  'flex flex-col items-center gap-1 py-1 px-2 transition ' +
                   (currentView === 'chat' ? 'text-emerald-600 font-bold' : 'text-slate-600')
                 }
               >
@@ -422,19 +451,22 @@ export default function App() {
               <button
                 onClick={() => setCurrentView('contacts')}
                 className={
-                  'flex flex-col items-center gap-1 py-1 px-3 transition ' +
+                  'flex flex-col items-center gap-1 py-1 px-2 transition ' +
                   (currentView === 'contacts' ? 'text-emerald-600 font-bold' : 'text-slate-600')
                 }
               >
                 <UserIcon />
-                <span className="text-[10px] font-medium">Data Kontak</span>
+                <span className="text-[10px] font-medium">Kontak</span>
               </button>
               <button
-                onClick={() => setShowTemplateModal(true)}
-                className="flex flex-col items-center gap-1 py-1 px-3 text-slate-600 hover:text-emerald-600 transition"
+                onClick={() => setCurrentView('broadcast')}
+                className={
+                  'flex flex-col items-center gap-1 py-1 px-2 transition ' +
+                  (currentView === 'broadcast' ? 'text-emerald-600 font-bold' : 'text-slate-600')
+                }
               >
-                <FileTextIcon />
-                <span className="text-[10px] font-medium">Template</span>
+                <span className="text-sm leading-none">📢</span>
+                <span className="text-[10px] font-medium">Broadcast</span>
               </button>
             </div>
           </div>
@@ -593,7 +625,7 @@ export default function App() {
                 </div>
                 <p className="text-sm font-semibold text-slate-600">Pilih Kontak Pelanggan</p>
                 <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                  Klik kontak di samping atau klik tombol ikon Kontak di sidebar kiri untuk mengelola master data.
+                  Klik kontak di samping atau gunakan ikon navigasi di sidebar kiri untuk berpindah ke Master Kontak dan Paket Broadcast.
                 </p>
               </div>
             )}
