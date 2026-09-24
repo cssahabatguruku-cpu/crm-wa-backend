@@ -88,13 +88,13 @@ export default function App() {
           messageMap[msg.contact_id] = msg;
         }
 
-        // Hitung unread HANYA untuk pesan masuk (inbound) yang statusnya belum 'read'
+        // Hitung unread HANYA untuk pesan masuk (inbound) yang statusnya BUKAN 'read'
         if (msg.direction === 'inbound' && msg.status !== 'read') {
           unreadMap[msg.contact_id] = (unreadMap[msg.contact_id] || 0) + 1;
         }
       });
 
-      // Filter kontak aktif & set unread = 0 jika kontak sedang dibuka
+      // Filter kontak aktif
       const activeContacts = (contactsData || [])
         .filter((c) => messageMap[c.id])
         .map((c) => {
@@ -123,44 +123,48 @@ export default function App() {
     }
   }, [selectedContact]);
 
-  // 2. Fetch Isi Percakapan
-  const fetchMessages = useCallback(async (contactId) => {
-    if (!contactId) return;
-    try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('contact_id', contactId)
-        .order('created_at', { ascending: true });
+  // 2. Fetch Isi Pesan + Otomatis Update Status Database Menjadi 'read'
+  const fetchMessages = useCallback(
+    async (contactId) => {
+      if (!contactId) return;
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('contact_id', contactId)
+          .order('created_at', { ascending: true });
 
-      if (error) throw error;
-      setMessages(data || []);
-    } catch (err) {
-      console.warn('Gagal memuat pesan:', err.message);
-    }
-  }, []);
+        if (error) throw error;
+        setMessages(data || []);
 
-  // 3. Aksi Membuka Chat Kontak (Tandai 'read' Seketika)
-  const handleSelectContact = async (contact) => {
+        // Cek apakah ada pesan masuk yang belum berstatus 'read'
+        const hasUnread = (data || []).some(
+          (m) => m.direction === 'inbound' && m.status !== 'read'
+        );
+
+        if (hasUnread) {
+          // Update status di Supabase
+          await supabase
+            .from('messages')
+            .update({ status: 'read' })
+            .eq('contact_id', contactId)
+            .eq('direction', 'inbound');
+
+          // Hilangkan angka hijau pada kontak ini di UI
+          setContacts((prev) =>
+            prev.map((c) => (c.id === contactId ? { ...c, unread_count: 0 } : c))
+          );
+        }
+      } catch (err) {
+        console.warn('Gagal memuat pesan:', err.message);
+      }
+    },
+    []
+  );
+
+  // 3. Aksi Membuka Chat Kontak
+  const handleSelectContact = (contact) => {
     setSelectedContact(contact);
-
-    // Langsung hilangkan badge hijau di UI secara lokal
-    setContacts((prev) =>
-      prev.map((c) => (c.id === contact.id ? { ...c, unread_count: 0 } : c))
-    );
-
-    // Update status pesan masuk di Supabase menjadi 'read'
-    try {
-      await supabase
-        .from('messages')
-        .update({ status: 'read' })
-        .eq('contact_id', contact.id)
-        .eq('direction', 'inbound')
-        .neq('status', 'read');
-    } catch (err) {
-      console.warn('Gagal update status read:', err.message);
-    }
-
     if (typeof window !== 'undefined') {
       window.history.pushState({ page: 'chat', contactId: contact.id }, '');
     }
@@ -179,7 +183,7 @@ export default function App() {
           fetchActiveChats();
           if (selectedContact?.id === payload.new.contact_id) {
             setMessages((prev) => [...prev, payload.new]);
-            // Jika chat sedang terbuka, langsung tandai pesan baru sebagai read
+            // Jika chat sedang aktif dibuka, langsung set status read di DB
             supabase
               .from('messages')
               .update({ status: 'read' })
@@ -502,7 +506,9 @@ export default function App() {
                           <h2
                             className={
                               'text-sm truncate ' +
-                              (hasUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-800')
+                              (hasUnread
+                                ? 'font-bold text-slate-900'
+                                : 'font-semibold text-slate-800')
                             }
                           >
                             {contact.name || contact.phone_number}
