@@ -170,7 +170,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
     let finalBodyText = newTmplBody.trim();
 
     // Auto-fix Meta Rule: Jika diakhiri variabel {{x}}, tambahkan titik di akhir
-    if (/\{\{\d+\}\}$/.test(finalBodyText)) {
+    if (/\{\{\d+\\}$/.test(finalBodyText)) {
       finalBodyText += '.';
     }
 
@@ -530,7 +530,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
                   className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none leading-relaxed"
                 ></textarea>
                 <p className="text-[10px] text-amber-700 bg-amber-50 p-2 rounded border border-amber-200 mt-1">
-                  💡 <strong>Aturan Meta:</strong> Akhiri pesan dengan tanda titik <code>.</code> setelah variabel terakhir (misal: <code>... untuk {{2}}.</code>) agar tidak ditolak sistem Meta.
+                  💡 <strong>Aturan Meta:</strong> Akhiri pesan dengan tanda titik <code>.</code> setelah variabel terakhir (misal: <code>{"... untuk {{2}}."}</code>) agar tidak ditolak sistem Meta.
                 </p>
               </div>
 
