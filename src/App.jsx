@@ -6,6 +6,7 @@ import ContactModal from './components/modals/ContactModal';
 import ContactsPage from './pages/ContactsPage';
 import BroadcastListsPage from './pages/BroadcastListsPage';
 import TemplatesPage from './pages/TemplatesPage';
+import SettingsPage from './pages/SettingsPage';
 import {
   SendIcon,
   ArrowLeftIcon,
@@ -32,25 +33,27 @@ const supabase = createClient(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY);
 const DEFAULT_CHANNELS = [
   {
     id: 'ch-1',
-    name: 'Sahabat Guru (Barantum)',
+    name: 'Sahabat Guru (Lama/Barantum)',
     phone_number: '6282322726989',
     waba_id: '163200896887310',
     phone_number_id: '4326818007572416',
     access_token:
       'EAAZBLhjrRT18BSoHItgxuRkvZAVg9XXylyw0BZBQcdWBuZCJlOfuHoo69lbVjh5TKiNZA62dSMl411wSggNytzpWwcM0oCjXc410AZBhsKRowuyqnZBWT6vcncEBwgDgZAgF7sriDJocBiBH5VAlKqkA3gtkNGnLCdzN4vyjgvhPrSGIdcwJXTCGZCd1hFMOR8JFJIAZDZD',
+    is_active: true,
   },
   {
     id: 'ch-2',
-    name: 'Sahabat Guru (Mandiri/Baru)',
-    phone_number: '628XXXXXXXXXX',
+    name: 'Sahabat Guru (Mandiri Baru)',
+    phone_number: '6281234567890',
     waba_id: 'ISIKAN_WABA_ID_BARU',
     phone_number_id: 'ISIKAN_PHONE_ID_BARU',
     access_token: 'ISIKAN_TOKEN_BARU',
+    is_active: true,
   },
 ];
 
 export default function App() {
-  const [currentView, setCurrentView] = useState('chat'); // 'chat' | 'contacts' | 'broadcast' | 'templates'
+  const [currentView, setCurrentView] = useState('chat'); // 'chat' | 'contacts' | 'broadcast' | 'templates' | 'settings'
   const [contacts, setContacts] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -58,7 +61,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilterTab, setActiveFilterTab] = useState('all');
 
-  // Multi-Channel States
+  // Multi-Channel / Multi-WABA States
   const [channels, setChannels] = useState(DEFAULT_CHANNELS);
   const [activeChannel, setActiveChannel] = useState(DEFAULT_CHANNELS[0]);
 
@@ -87,22 +90,23 @@ export default function App() {
   };
 
   // Fetch Channel List dari Supabase 'channels' Table jika ada
-  useEffect(() => {
-    const fetchChannels = async () => {
-      try {
-        const { data, error } = await supabase.from('channels').select('*').eq('is_active', true);
-        if (!error && data && data.length > 0) {
-          setChannels(data);
-          setActiveChannel(data[0]);
-        }
-      } catch (err) {
-        console.warn('Menggunakan fallback channels default.');
+  const fetchChannelsFromSupabase = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.from('channels').select('*').eq('is_active', true);
+      if (!error && data && data.length > 0) {
+        setChannels(data);
+        setActiveChannel(data[0]);
       }
-    };
-    fetchChannels();
+    } catch (err) {
+      console.warn('Menggunakan fallback channels default.');
+    }
   }, []);
 
-  // 1. Clean Inbox Fetch: HANYA TAMPILKAN KONTAK YANG PERNAH MEMBALAS
+  useEffect(() => {
+    fetchChannelsFromSupabase();
+  }, [fetchChannelsFromSupabase]);
+
+  // 1. Clean Inbox Fetch: HANYA TAMPILKAN KONTAK YANG PERNAH MEMBALAS (ADA PESAN INBOUND)
   const fetchActiveChats = useCallback(async () => {
     try {
       const { data: contactsData, error: cErr } = await supabase.from('contacts').select('*');
@@ -120,6 +124,7 @@ export default function App() {
       const contactsWithInbound = new Set();
 
       (messagesData || []).forEach((msg) => {
+        // Tandai jika kontak pernah mengirimkan balasan (inbound)
         if (msg.direction === 'inbound') {
           contactsWithInbound.add(msg.contact_id);
         }
@@ -133,6 +138,7 @@ export default function App() {
         }
       });
 
+      // Filter: Hanya sertakan kontak yang memiliki balasan inbound
       const activeContacts = (contactsData || [])
         .filter((c) => contactsWithInbound.has(c.id))
         .map((c) => {
@@ -374,11 +380,36 @@ export default function App() {
           >
             <CreditCardIcon />
           </button>
+
+          <button
+            title="Pengaturan Multi-Nomor & WABA Mandiri"
+            onClick={() => setCurrentView('settings')}
+            className={
+              'p-3 rounded-xl transition font-bold text-base ' +
+              (currentView === 'settings' ? 'text-emerald-400 bg-slate-800 shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800')
+            }
+          >
+            ⚙️
+          </button>
         </div>
       </div>
 
-      {/* MAIN VIEW ROUTING: CHAT | CONTACTS DASHBOARD | BROADCAST LISTS | TEMPLATES DASHBOARD */}
-      {currentView === 'contacts' ? (
+      {/* MAIN VIEW ROUTING: CHAT | CONTACTS | BROADCAST | TEMPLATES | SETTINGS */}
+      {currentView === 'settings' ? (
+        <SettingsPage
+          supabaseUrl={DEFAULT_SUPABASE_URL}
+          supabaseKey={DEFAULT_SUPABASE_ANON_KEY}
+          activeChannel={activeChannel}
+          onSelectChannel={(ch) => {
+            setActiveChannel(ch);
+            showNotice(`Beralih ke WABA: ${ch.name}`, 'info');
+            setCurrentView('chat');
+          }}
+          onChannelsUpdated={(updatedList) => {
+            setChannels(updatedList);
+          }}
+        />
+      ) : currentView === 'contacts' ? (
         <ContactsPage
           supabaseUrl={DEFAULT_SUPABASE_URL}
           supabaseKey={DEFAULT_SUPABASE_ANON_KEY}
@@ -609,6 +640,16 @@ export default function App() {
               >
                 <FileTextIcon />
                 <span className="text-[10px] font-medium">Template</span>
+              </button>
+              <button
+                onClick={() => setCurrentView('settings')}
+                className={
+                  'flex flex-col items-center gap-1 py-1 px-2 transition ' +
+                  (currentView === 'settings' ? 'text-emerald-600 font-bold' : 'text-slate-600')
+                }
+              >
+                <span className="text-sm leading-none">⚙️</span>
+                <span className="text-[10px] font-medium">Setting</span>
               </button>
             </div>
           </div>
