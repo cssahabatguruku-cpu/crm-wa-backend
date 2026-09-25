@@ -7,6 +7,7 @@ import ContactsPage from './pages/ContactsPage';
 import BroadcastListsPage from './pages/BroadcastListsPage';
 import TemplatesPage from './pages/TemplatesPage';
 import SettingsPage from './pages/SettingsPage';
+import HelpPage from './pages/HelpPage';
 import {
   SendIcon,
   ArrowLeftIcon,
@@ -29,7 +30,6 @@ const DEFAULT_API_URL = '/api/send-message';
 
 const supabase = createClient(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY);
 
-// Default Fallback Channels (Barantum vs Mandiri Baru)
 const DEFAULT_CHANNELS = [
   {
     id: 'ch-1',
@@ -53,7 +53,7 @@ const DEFAULT_CHANNELS = [
 ];
 
 export default function App() {
-  const [currentView, setCurrentView] = useState('chat'); // 'chat' | 'contacts' | 'broadcast' | 'templates' | 'settings'
+  const [currentView, setCurrentView] = useState('chat'); // 'chat' | 'contacts' | 'broadcast' | 'templates' | 'settings' | 'help'
   const [contacts, setContacts] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -61,7 +61,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilterTab, setActiveFilterTab] = useState('all');
 
-  // Multi-Channel / Multi-WABA States
+  // Multi-Channel States
   const [channels, setChannels] = useState(DEFAULT_CHANNELS);
   const [activeChannel, setActiveChannel] = useState(DEFAULT_CHANNELS[0]);
 
@@ -89,7 +89,6 @@ export default function App() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // Fetch Channel List dari Supabase 'channels' Table jika ada
   const fetchChannelsFromSupabase = useCallback(async () => {
     try {
       const { data, error } = await supabase.from('channels').select('*').eq('is_active', true);
@@ -106,7 +105,7 @@ export default function App() {
     fetchChannelsFromSupabase();
   }, [fetchChannelsFromSupabase]);
 
-  // 1. Clean Inbox Fetch: HANYA TAMPILKAN KONTAK YANG PERNAH MEMBALAS (ADA PESAN INBOUND)
+  // Clean Inbox Fetch
   const fetchActiveChats = useCallback(async () => {
     try {
       const { data: contactsData, error: cErr } = await supabase.from('contacts').select('*');
@@ -124,7 +123,6 @@ export default function App() {
       const contactsWithInbound = new Set();
 
       (messagesData || []).forEach((msg) => {
-        // Tandai jika kontak pernah mengirimkan balasan (inbound)
         if (msg.direction === 'inbound') {
           contactsWithInbound.add(msg.contact_id);
         }
@@ -138,7 +136,6 @@ export default function App() {
         }
       });
 
-      // Filter: Hanya sertakan kontak yang memiliki balasan inbound
       const activeContacts = (contactsData || [])
         .filter((c) => contactsWithInbound.has(c.id))
         .map((c) => {
@@ -391,11 +388,25 @@ export default function App() {
           >
             ⚙️
           </button>
+
+          {/* Tombol Pusat Bantuan & Panduan */}
+          <button
+            title="Pusat Bantuan & Panduan Sistem"
+            onClick={() => setCurrentView('help')}
+            className={
+              'p-3 rounded-xl transition font-bold text-base ' +
+              (currentView === 'help' ? 'text-emerald-400 bg-slate-800 shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800')
+            }
+          >
+            📖
+          </button>
         </div>
       </div>
 
-      {/* MAIN VIEW ROUTING: CHAT | CONTACTS | BROADCAST | TEMPLATES | SETTINGS */}
-      {currentView === 'settings' ? (
+      {/* MAIN VIEW ROUTING: CHAT | CONTACTS | BROADCAST | TEMPLATES | SETTINGS | HELP */}
+      {currentView === 'help' ? (
+        <HelpPage onNavigateSettings={() => setCurrentView('settings')} />
+      ) : currentView === 'settings' ? (
         <SettingsPage
           supabaseUrl={DEFAULT_SUPABASE_URL}
           supabaseKey={DEFAULT_SUPABASE_ANON_KEY}
@@ -642,14 +653,14 @@ export default function App() {
                 <span className="text-[10px] font-medium">Template</span>
               </button>
               <button
-                onClick={() => setCurrentView('settings')}
+                onClick={() => setCurrentView('help')}
                 className={
                   'flex flex-col items-center gap-1 py-1 px-2 transition ' +
-                  (currentView === 'settings' ? 'text-emerald-600 font-bold' : 'text-slate-600')
+                  (currentView === 'help' ? 'text-emerald-600 font-bold' : 'text-slate-600')
                 }
               >
-                <span className="text-sm leading-none">⚙️</span>
-                <span className="text-[10px] font-medium">Setting</span>
+                <span className="text-sm leading-none">📖</span>
+                <span className="text-[10px] font-medium">Bantuan</span>
               </button>
             </div>
           </div>
