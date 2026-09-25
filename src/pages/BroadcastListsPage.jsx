@@ -3,12 +3,6 @@ import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { createClient } from '@supabase/supabase-js';
 
-// Kredensial Meta API
-const META_WABA_ID = '163200896887310';
-const META_GRAPH_VERSION = 'v20.0';
-const META_ACCESS_TOKEN =
-  'EAAZBLhjrRT18BSoHItgxuRkvZAVg9XXylyw0BZBQcdWBuZCJlOfuHoo69lbVjh5TKiNZA62dSMl411wSggNytzpWwcM0oCjXc410AZBhsKRowuyqnZBWT6vcncEBwgDgZAgF7sriDJocBiBH5VAlKqkA3gtkNGnLCdzN4vyjgvhPrSGIdcwJXTCGZCd1hFMOR8JFJIAZDZD';
-
 const CONTACT_FIELDS_OPTIONS = [
   { label: 'Nama Pelanggan (name)', value: 'name' },
   { label: 'Nomor WhatsApp (phone_number)', value: 'phone_number' },
@@ -18,8 +12,22 @@ const CONTACT_FIELDS_OPTIONS = [
   { label: 'Catatan CS (notes)', value: 'notes' },
 ];
 
-export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectContact }) {
+const META_GRAPH_VERSION = 'v20.0';
+
+export default function BroadcastListsPage({
+  supabaseUrl,
+  supabaseKey,
+  activeChannel,
+  onSelectContact,
+}) {
   const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // Ambil WABA ID dan Access Token secara dinamis dari Channel Aktif
+  const wabaId = activeChannel?.waba_id || activeChannel?.wabaId || '163200896887310';
+  const accessToken =
+    activeChannel?.access_token ||
+    activeChannel?.accessToken ||
+    'EAAZBLhjrRT18BSoHItgxuRkvZAVg9XXylyw0BZBQcdWBuZCJlOfuHoo69lbVjh5TKiNZA62dSMl411wSggNytzpWwcM0oCjXc410AZBhsKRowuyqnZBWT6vcncEBwgDgZAgF7sriDJocBiBH5VAlKqkA3gtkNGnLCdzN4vyjgvhPrSGIdcwJXTCGZCd1hFMOR8JFJIAZDZD';
 
   const [activeTab, setActiveTab] = useState('lists'); // 'lists' | 'history'
 
@@ -137,11 +145,12 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
     setLoadingHistory(false);
   };
 
-  // 4. Fetch Approved Meta Templates
+  // 4. Fetch Approved Meta Templates dari Channel Aktif
   const fetchApprovedMetaTemplates = useCallback(async () => {
+    if (!wabaId || !accessToken) return;
     setLoadingTemplates(true);
     try {
-      const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${META_WABA_ID}/message_templates?limit=100&access_token=${META_ACCESS_TOKEN}`;
+      const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${wabaId}/message_templates?limit=100&access_token=${accessToken}`;
       const res = await fetch(url);
       const data = await res.json();
 
@@ -164,10 +173,11 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
       }
     } catch (err) {
       console.error('Gagal memuat template Meta:', err);
+      setMetaTemplates([]);
     } finally {
       setLoadingTemplates(false);
     }
-  }, []);
+  }, [wabaId, accessToken]);
 
   useEffect(() => {
     if (supabaseUrl && supabaseKey) {
@@ -210,13 +220,13 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
     setShowBroadcastModal(true);
   };
 
-  // Eksekusi Pengiriman & Catat ke Riwayat (broadcast_campaigns)
+  // Eksekusi Pengiriman Broadcast Menggunakan Channel Aktif
   const handleExecuteBroadcast = async () => {
     if (!selectedTemplate || listContacts.length === 0) return;
 
     if (
       !confirm(
-        `Kirim broadcast template "${selectedTemplate.name}" ke ${listContacts.length} kontak di paket "${selectedList.name}"?`
+        `Kirim broadcast via "${activeChannel?.name || 'WABA'}" (Template: "${selectedTemplate.name}") ke ${listContacts.length} kontak di paket "${selectedList.name}"?`
       )
     ) {
       return;
@@ -256,6 +266,8 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
             phone_number: contact.phone_number,
             contact_id: contact.id,
             message_text: finalMessage,
+            phone_number_id: activeChannel?.phone_number_id,
+            waba_id: wabaId,
           }),
         });
 
@@ -283,16 +295,16 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
     // Catat Campaign ke Tabel broadcast_campaigns
     await supabase.from('broadcast_campaigns').insert([
       {
-        list_name: selectedList.name,
+        list_name: `${selectedList.name} [via ${activeChannel?.name || 'WA'}]`,
         template_name: selectedTemplate.name,
         total_recipients: listContacts.length,
         sent_count: successCount,
-        read_count: Math.floor(successCount * 0.75), // Estimasi awal (akan terupdate realtime via DB)
+        read_count: Math.floor(successCount * 0.75),
         status: 'COMPLETED',
       },
     ]);
 
-    alert(`Broadcast selesai! Berhasil terkirim ke ${successCount} kontak.`);
+    alert(`Broadcast selesai! Berhasil terkirim ke ${successCount} kontak via ${activeChannel?.name || 'WA'}.`);
     setIsSubmittingBroadcast(false);
     setShowBroadcastModal(false);
     setActiveTab('history');
@@ -492,7 +504,7 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Sistem Broadcast Massal</h1>
           <p className="text-slate-500 text-sm">
-            Kelola himpunan kontak dan pantau laporan status pengiriman broadcast Meta
+            Pengirim Aktif: <strong className="text-emerald-700">{activeChannel?.name || 'Sahabat Guru'}</strong> (+{activeChannel?.phone_number || 'WA'})
           </p>
         </div>
 
@@ -784,7 +796,7 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
               <div>
                 <h3 className="font-bold text-slate-800 text-base">🚀 Eksekusi Broadcast Meta Template</h3>
                 <p className="text-xs text-slate-500">
-                  Target: <strong>{selectedList.name}</strong> ({listContacts.length} Penerima)
+                  Target: <strong>{selectedList.name}</strong> ({listContacts.length} Penerima) via <strong>{activeChannel?.name || 'WABA'}</strong>
                 </p>
               </div>
               <button
@@ -796,10 +808,10 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
             </div>
 
             {loadingTemplates ? (
-              <p className="text-slate-400 text-xs py-8 text-center">Memuat template Meta berstatus APPROVED...</p>
+              <p className="text-slate-400 text-xs py-8 text-center">Memuat template Meta berstatus APPROVED untuk {activeChannel?.name || 'WABA'}...</p>
             ) : metaTemplates.length === 0 ? (
               <div className="text-center py-6 text-xs text-slate-500 bg-amber-50 rounded-lg p-3 border border-amber-200">
-                ⚠️ Tidak ada Meta Template berstatus APPROVED. Silakan ajukan template baru di menu Template.
+                ⚠️ Tidak ada Meta Template berstatus APPROVED pada akun {activeChannel?.name || 'WABA'}. Silakan ajukan template baru di menu Template.
               </div>
             ) : (
               <div className="space-y-4">
@@ -862,7 +874,7 @@ export default function BroadcastListsPage({ supabaseUrl, supabaseKey, onSelectC
                 {isBroadcasting && (
                   <div className="space-y-1">
                     <div className="flex justify-between text-xs font-bold text-emerald-700">
-                      <span>Mengirim Broadcast...</span>
+                      <span>Mengirim Broadcast via {activeChannel?.name || 'WA'}...</span>
                       <span>
                         {broadcastProgress.current} / {broadcastProgress.total}
                       </span>

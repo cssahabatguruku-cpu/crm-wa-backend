@@ -1,10 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-// Konfigurasi Kredensial Meta Graph API
-const META_WABA_ID = '163200896887310';
-const META_GRAPH_VERSION = 'v20.0';
-const META_ACCESS_TOKEN = 'EAAZBLhjrRT18BSoHItgxuRkvZAVg9XXylyw0BZBQcdWBuZCJlOfuHoo69lbVjh5TKiNZA62dSMl411wSggNytzpWwcM0oCjXc410AZBhsKRowuyqnZBWT6vcncEBwgDgZAgF7sriDJocBiBH5VAlKqkA3gtkNGnLCdzN4vyjgvhPrSGIdcwJXTCGZCd1hFMOR8JFJIAZDZD';
-
 // Pilihan Kolom Database Kontak untuk Pemetaan
 const CONTACT_FIELDS_OPTIONS = [
   { label: 'Nama Pelanggan (name)', value: 'name', sample: 'Ahmad Supardi' },
@@ -18,7 +13,16 @@ const CONTACT_FIELDS_OPTIONS = [
   { label: 'Custom: Kode Voucher (custom_fields.voucher)', value: 'custom.voucher', sample: 'PROMO2026' },
 ];
 
-export default function TemplatesPage({ onSelectTemplateForChat }) {
+const META_GRAPH_VERSION = 'v20.0';
+
+export default function TemplatesPage({ activeChannel, onSelectTemplateForChat }) {
+  // Ambil WABA ID dan Access Token secara dinamis dari Channel Aktif
+  const wabaId = activeChannel?.waba_id || activeChannel?.wabaId || '163200896887310';
+  const accessToken =
+    activeChannel?.access_token ||
+    activeChannel?.accessToken ||
+    'EAAZBLhjrRT18BSoHItgxuRkvZAVg9XXylyw0BZBQcdWBuZCJlOfuHoo69lbVjh5TKiNZA62dSMl411wSggNytzpWwcM0oCjXc410AZBhsKRowuyqnZBWT6vcncEBwgDgZAgF7sriDJocBiBH5VAlKqkA3gtkNGnLCdzN4vyjgvhPrSGIdcwJXTCGZCd1hFMOR8JFJIAZDZD';
+
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -38,13 +42,14 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
   const [varSamples, setVarSamples] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 1. Fetch Template Langsung dari Server Meta Graph API
+  // 1. Fetch Template Langsung dari Server Meta Graph API berdasarkan Channel Aktif
   const fetchMetaTemplates = useCallback(async () => {
+    if (!wabaId || !accessToken) return;
     setLoading(true);
     setErrorMsg(null);
 
     try {
-      const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${META_WABA_ID}/message_templates?limit=100&access_token=${META_ACCESS_TOKEN}`;
+      const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${wabaId}/message_templates?limit=100&access_token=${accessToken}`;
       const response = await fetch(url);
       const result = await response.json();
 
@@ -67,14 +72,18 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
       setTemplates(formatted);
       if (formatted.length > 0) {
         setSelectedTemplate(formatted[0]);
+      } else {
+        setSelectedTemplate(null);
       }
     } catch (err) {
       console.error('Meta API Error:', err);
       setErrorMsg(err.message);
+      setTemplates([]);
+      setSelectedTemplate(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [wabaId, accessToken]);
 
   useEffect(() => {
     fetchMetaTemplates();
@@ -145,13 +154,11 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
       .replace(/\s+/g, '_')
       .replace(/[^a-z0-9_]/g, '');
 
-    // Deteksi variabel {{1}}, {{2}}, dst.
     const rawMatches = newTmplBody.match(/\{\{\d+\}\}/g) || [];
     const varNumbers = Array.from(
       new Set(rawMatches.map((m) => parseInt(m.replace(/[^\d]/g, ''), 10)))
     ).sort((a, b) => a - b);
 
-    // Validasi Urutan Variabel
     if (varNumbers.length > 0) {
       if (varNumbers[0] !== 1) {
         alert('Variabel wajib dimulai dari {{1}}!');
@@ -169,7 +176,6 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
 
     let finalBodyText = newTmplBody.trim();
 
-    // Auto-fix Meta Rule: Jika diakhiri variabel {{x}}, tambahkan titik di akhir
     if (/\{\{\d+\\}$/.test(finalBodyText)) {
       finalBodyText += '.';
     }
@@ -179,7 +185,6 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
       text: finalBodyText,
     };
 
-    // Sertakan parameter example.body_text jika ada variabel
     if (varNumbers.length > 0) {
       const sampleValuesArr = varNumbers.map((num) =>
         String(varSamples[num] || `Contoh ${num}`).trim()
@@ -198,11 +203,11 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
 
     try {
       const response = await fetch(
-        `https://graph.facebook.com/${META_GRAPH_VERSION}/${META_WABA_ID}/message_templates`,
+        `https://graph.facebook.com/${META_GRAPH_VERSION}/${wabaId}/message_templates`,
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${META_ACCESS_TOKEN}`,
+            Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
@@ -232,7 +237,6 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
     }
   };
 
-  // Filter Lokal
   const filteredTemplates = templates.filter((t) => {
     const matchCategory =
       selectedCategory === 'ALL' || t.category === selectedCategory;
@@ -259,7 +263,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
             Manajemen Template Siaran (Meta HSM)
           </h1>
           <p className="text-slate-500 text-sm">
-            Petakan variabel template Meta dengan kolom kontak database Supabase
+            Akun Aktif: <strong className="text-emerald-700">{activeChannel?.name || 'Sahabat Guru'}</strong> (WABA ID: {wabaId})
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -282,7 +286,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
       {/* Error Alert */}
       {errorMsg && (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl mb-6 text-xs font-medium">
-          ❌ Meta API Error: {errorMsg}
+          ❌ Meta API Error ({activeChannel?.name || 'WABA'}): {errorMsg}
         </div>
       )}
 
@@ -320,11 +324,11 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
         <div className="lg:col-span-2 space-y-3">
           {loading ? (
             <div className="text-slate-400 text-sm py-12 text-center bg-white rounded-xl border p-4">
-              Menghubungkan ke Meta Cloud API...
+              Menghubungkan ke Meta Cloud API untuk akun <strong>{activeChannel?.name || 'WABA'}</strong>...
             </div>
           ) : filteredTemplates.length === 0 ? (
             <div className="text-center py-12 text-slate-400 text-sm bg-white rounded-xl border p-4">
-              Tidak ada template yang ditemukan di akun WABA Anda.
+              Tidak ada template yang ditemukan di akun WABA ({activeChannel?.name || 'Sahabat Guru'}).
             </div>
           ) : (
             filteredTemplates.map((tmpl) => {
@@ -467,7 +471,7 @@ export default function TemplatesPage({ onSelectTemplateForChat }) {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-lg w-full p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-slate-800 text-base mb-1">
-              Ajukan Template Siaran Baru ke Meta
+              Ajukan Template Baru ke Meta ({activeChannel?.name || 'WABA'})
             </h3>
             <p className="text-slate-500 text-xs mb-3">
               Template akan dikirim langsung ke WhatsApp Cloud API untuk proses tinjauan otomatis Meta.
