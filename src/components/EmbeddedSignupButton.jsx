@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react';
 
-// ID Aplikasi Meta Developer Anda (diambil dari dasbor Meta Developer)
+// ID Aplikasi Meta Developer Anda
 const FB_APP_ID = '4375533279334239';
 
-// ID Konfigurasi Facebook Login for Business (dari Facebook Login for Business -> Configurations)
-const CONFIG_ID = 'ISIKAN_CONFIG_ID_DARI_META';
+// Configuration ID resmi dari Meta Facebook Login for Business
+const CONFIG_ID = '1066554969321589';
 
 export default function EmbeddedSignupButton({ onSuccess }) {
   const [sdkLoaded, setSdkLoaded] = useState(false);
 
   useEffect(() => {
-    // 1. Memuat Facebook JS SDK resmi
+    // 1. Memuat Facebook JS SDK Resmi Meta
     window.fbAsyncInit = function () {
       window.FB.init({
         appId: FB_APP_ID,
@@ -57,7 +57,7 @@ export default function EmbeddedSignupButton({ onSuccess }) {
           }
         }
       } catch (err) {
-        // Abaikan event non-JSON
+        // Abaikan pesan non-JSON
       }
     };
 
@@ -65,10 +65,10 @@ export default function EmbeddedSignupButton({ onSuccess }) {
     return () => window.removeEventListener('message', handleMetaMessage);
   }, [onSuccess]);
 
-  // 3. Menjalankan Pop-Up Meta
+  // 3. Peluncuran Pop-Up Login Meta
   const launchEmbeddedSignup = () => {
     if (!window.FB) {
-      alert('Facebook SDK sedang dimuat. Harap coba lagi dalam 3 detik.');
+      alert('Facebook SDK sedang dimuat. Harap coba lagi dalam beberapa detik.');
       return;
     }
 
@@ -76,7 +76,7 @@ export default function EmbeddedSignupButton({ onSuccess }) {
       (response) => {
         if (response.authResponse) {
           const code = response.authResponse.code;
-          console.log('Authorization Code Meta:', code);
+          console.log('Authorization Code dari Meta:', code);
         }
       },
       {
