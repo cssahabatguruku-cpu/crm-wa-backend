@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import EmbeddedSignupButton from '../components/EmbeddedSignupButton';
 
 const META_GRAPH_VERSION = 'v20.0';
 
@@ -204,13 +205,13 @@ export default function SettingsPage({
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Pengaturan & Multi-Nomor WhatsApp</h1>
           <p className="text-slate-500 text-sm">
-            Kelola seluruh akun WhatsApp Business (WABA Mandiri & Partner) dalam satu dasbor
+            Kelola seluruh akun WhatsApp Business (WABA Mandiri, Coexistence, & Partner) dalam satu dasbor
           </p>
         </div>
 
         <button
           onClick={handleOpenAdd}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm transition shadow-md flex items-center gap-2"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm transition shadow-md flex items-center gap-2 cursor-pointer"
         >
           <span>+ Tambah Nomor WhatsApp Baru</span>
         </button>
@@ -218,10 +219,9 @@ export default function SettingsPage({
 
       {/* Info Guide Box */}
       <div className="bg-slate-900 text-white p-5 rounded-2xl mb-6 shadow-sm leading-relaxed text-xs">
-        <h2 className="font-bold text-sm text-emerald-400 mb-1">💡 Panduan Integrasi WABA Mandiri</h2>
+        <h2 className="font-bold text-sm text-emerald-400 mb-1">💡 Panduan Integrasi WhatsApp</h2>
         <p className="text-slate-300">
-          Anda bisa menambahkan nomor WhatsApp baru yang Anda daftarkan murni secara mandiri di Portal Meta Developer.
-          Setiap nomor yang didaftarkan secara mandiri dapat dihubungkan langsung ke kartu Visa/Debit internal Anda di Meta Business Suite tanpa terkendala Lini Kredit mitra.
+          Gunakan tombol <strong>Auto-Connect via Meta</strong> untuk pendaftaran instan menggunakan pemindaian QR Code (Mode Coexistence)[cite: 16], atau masukkan WABA ID & Phone Number ID secara manual jika Anda mendaftar melalui Meta Developer Portal.
         </p>
       </div>
 
@@ -233,7 +233,7 @@ export default function SettingsPage({
           </h2>
           <button
             onClick={fetchChannels}
-            className="text-xs text-slate-600 hover:text-emerald-600 font-semibold flex items-center gap-1"
+            className="text-xs text-slate-600 hover:text-emerald-600 font-semibold flex items-center gap-1 cursor-pointer"
           >
             🔄 Sync Data
           </button>
@@ -293,7 +293,7 @@ export default function SettingsPage({
                         <button
                           onClick={() => handleToggleActive(ch)}
                           className={
-                            'px-2.5 py-1 rounded-full text-[10px] font-bold border transition ' +
+                            'px-2.5 py-1 rounded-full text-[10px] font-bold border transition cursor-pointer ' +
                             (ch.is_active
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                               : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200')
@@ -306,20 +306,20 @@ export default function SettingsPage({
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => onSelectChannel && onSelectChannel(ch)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] px-2.5 py-1.5 rounded-lg font-bold shadow-sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] px-2.5 py-1.5 rounded-lg font-bold shadow-sm cursor-pointer"
                             title="Gunakan Nomor Ini"
                           >
                             Gunakan
                           </button>
                           <button
                             onClick={() => handleOpenEdit(ch)}
-                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] px-2.5 py-1.5 rounded-lg font-medium border"
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] px-2.5 py-1.5 rounded-lg font-medium border cursor-pointer"
                           >
                             ✏️ Edit
                           </button>
                           <button
                             onClick={() => handleDeleteChannel(ch.id, ch.name)}
-                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] px-2 py-1.5 rounded-lg font-medium border border-rose-200"
+                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] px-2 py-1.5 rounded-lg font-medium border border-rose-200 cursor-pointer"
                           >
                             🗑️
                           </button>
@@ -346,11 +346,40 @@ export default function SettingsPage({
               </h3>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-slate-600 font-bold"
+                className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
               >
                 ✕
               </button>
             </div>
+
+            {/* EMBEDDED SIGNUP BANNER (Khusus Mode Tambah Nomor) */}
+            {modalMode === 'add' && (
+              <div className="mb-5 p-4 bg-blue-50 border border-blue-200 rounded-2xl space-y-2">
+                <span className="text-xs font-bold text-blue-900 block">
+                  ⚡ Metode Instan (Embedded Signup & QR Code Coexistence)
+                </span>
+                <p className="text-[11px] text-blue-700 leading-relaxed">
+                  Hubungkan nomor tanpa perlu ke Meta Developer Portal[cite: 16]. Pop-up Meta akan memunculkan QR Code untuk dipindai langsung dari aplikasi WhatsApp Business di HP Anda[cite: 16].
+                </p>
+
+                <EmbeddedSignupButton
+                  onSuccess={({ phone_number_id, waba_id }) => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      waba_id: waba_id,
+                      phone_number_id: phone_number_id,
+                      name: prev.name || `WA Coexistence (${phone_number_id.slice(-4)})`,
+                    }));
+                    alert('Data WABA ID & Phone Number ID berhasil ditangkap otomatis dari Meta!');
+                  }}
+                />
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-blue-200"></div>
+                  <span className="flex-shrink mx-2 text-[10px] text-blue-500 uppercase font-bold">Atau Input Manual Kredensial</span>
+                  <div className="flex-grow border-t border-blue-200"></div>
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleSubmitForm} className="space-y-3.5">
               <div>
@@ -360,7 +389,7 @@ export default function SettingsPage({
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Sahabat Guru (Mandiri Baru)"
+                  placeholder="Contoh: Sahabat Guru (Coexistence HP)"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
@@ -431,7 +460,7 @@ export default function SettingsPage({
                   type="button"
                   onClick={handleTestConnection}
                   disabled={testingConnection}
-                  className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5"
+                  className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <span>{testingConnection ? 'Memeriksa Token Meta...' : '🔌 Uji Koneksi Meta Token'}</span>
                 </button>
@@ -454,14 +483,14 @@ export default function SettingsPage({
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow cursor-pointer"
                 >
                   {isSubmitting ? 'Menyimpan...' : 'Simpan Kredensial Akun'}
                 </button>
