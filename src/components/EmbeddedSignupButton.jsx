@@ -1,9 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-// ID Aplikasi Meta Developer Anda
 const FB_APP_ID = '4375533279334239';
-
-// Configuration ID resmi dari Meta Facebook Login for Business
 const CONFIG_ID = '1066554969321589';
 
 export default function EmbeddedSignupButton({ onSuccess }) {
@@ -65,7 +62,7 @@ export default function EmbeddedSignupButton({ onSuccess }) {
     return () => window.removeEventListener('message', handleMetaMessage);
   }, [onSuccess]);
 
-  // 3. Peluncuran Pop-Up Login Meta
+  // 3. Peluncuran Pop-Up Login Meta dengan Parameter Coexistence
   const launchEmbeddedSignup = () => {
     if (!window.FB) {
       alert('Facebook SDK sedang dimuat. Harap coba lagi dalam beberapa detik.');
@@ -84,7 +81,11 @@ export default function EmbeddedSignupButton({ onSuccess }) {
         response_type: 'code',
         override_default_response_type: true,
         extras: {
-          setup: {},
+          setup: {
+            // Memaksa Meta SDK untuk membuka alur pemindaian QR Code (Coexistence)
+            channel: 'WA_BUSINESS_APP',
+          },
+          featureType: 'coexistence',
         },
       }
     );
