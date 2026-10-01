@@ -29,15 +29,23 @@ export default async function handler(req, res) {
     });
   }
 
-  // Jika access_token dari frontend kosong/spaces, baru fallback ke WA_PERMANENT_TOKEN Vercel
-  const activePhoneNumberId = phone_number_id || process.env.WA_PHONE_NUMBER_ID;
-  const activeAccessToken = (access_token && access_token.trim() !== '') 
-    ? access_token.trim() 
-    : process.env.WA_PERMANENT_TOKEN;
+  // --- FILTER & SANITASI DARI TEKS PLACEHOLDER / DATA KOTOR DATABASE ---
+
+  // 1. Validasi Phone Number ID: Wajib berupa ANGKA murni.
+  // Jika berisi teks placeholder ("ISIKAN_..."), otomatis fallback ke WA_PHONE_NUMBER_ID Vercel.
+  const rawPhoneId = String(phone_number_id || '').trim();
+  const isValidPhoneId = /^\d+$/.test(rawPhoneId);
+  const activePhoneNumberId = isValidPhoneId ? rawPhoneId : process.env.WA_PHONE_NUMBER_ID;
+
+  // 2. Validasi Access Token: Wajib berawalan "EAA" dan tidak berisi teks "ISIKAN".
+  // Jika tidak valid, otomatis fallback ke WA_PERMANENT_TOKEN Vercel.
+  const rawToken = String(access_token || '').trim();
+  const isValidToken = rawToken.startsWith('EAA') && !rawToken.includes('ISIKAN');
+  const activeAccessToken = isValidToken ? rawToken : process.env.WA_PERMANENT_TOKEN;
 
   if (!activePhoneNumberId || !activeAccessToken) {
-    return res.status(500).json({
-      error: 'Kredensial Phone Number ID atau Access Token tidak ditemukan.'
+    return res.status(400).json({
+      error: 'Kredensial Phone Number ID atau Access Token tidak valid. Periksa menu Pengaturan CRM.'
     });
   }
 
@@ -63,7 +71,10 @@ export default async function handler(req, res) {
     const metaData = await metaResponse.json();
 
     if (!metaResponse.ok) {
-      throw new Error(metaData.error?.message || 'Gagal mengirim pesan via Meta Cloud API');
+      return res.status(metaResponse.status).json({
+        error: metaData.error?.message || 'Gagal mengirim pesan via Meta Cloud API',
+        details: metaData.error
+      });
     }
 
     const waMessageId = metaData.messages?.[0]?.id;
@@ -84,7 +95,7 @@ export default async function handler(req, res) {
     if (dbError) {
       return res.status(200).json({
         status: 'partial_success',
-        message: 'Pesan terkirim ke WA tetapi gagal dicatat di database.',
+        message: 'Pesan terkirim ke WA tetapi gagal dicatat di database Supabase.',
         error: dbError.message
       });
     }
