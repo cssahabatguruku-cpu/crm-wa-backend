@@ -1,58 +1,54 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Inisialisasi Supabase menggunakan Service Role Key agar dapat menulis ke tabel pesan
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default async function handler(req, res) {
-  // 1. Mengatur header CORS agar browser mengizinkan komunikasi lintas domain
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*'); // Mengizinkan akses dari dashboard web manapun
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
     'Access-Control-Allow-Headers',
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
   );
 
-  // 2. Menangani preflight request (OPTIONS) dari browser
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // 3. Memastikan metode HTTP utama adalah POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { phone_number, message_text, contact_id } = req.body || {};
+  // 1. Tangkap parameter dinamis dari Frontend
+  const { phone_number, message_text, contact_id, phone_number_id, access_token } = req.body || {};
 
-  // Validasi kelengkapan data sebelum diproses
   if (!phone_number || !message_text || !contact_id) {
     return res.status(400).json({ 
       error: 'Data tidak lengkap. Diperlukan: phone_number, message_text, dan contact_id' 
     });
   }
 
-  // Bersihkan format nomor HP (hanya angka)
-  const cleanPhone = String(phone_number).replace(/[^0-9]/g, '');
+  // 2. Gunakan Phone ID & Token dari Channel yang dipilih di CRM (Fallback ke .env jika kosong)
+  const activePhoneNumberId = phone_number_id || process.env.WA_PHONE_NUMBER_ID;
+  const activeAccessToken = access_token || process.env.WA_PERMANENT_TOKEN;
 
-  const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
-  const accessToken = process.env.WA_PERMANENT_TOKEN;
-
-  if (!phoneNumberId || !accessToken) {
+  if (!activePhoneNumberId || !activeAccessToken) {
     return res.status(500).json({
-      error: 'Environment variables WA_PHONE_NUMBER_ID atau WA_PERMANENT_TOKEN belum diatur di Vercel.'
+      error: 'Kredensial Phone Number ID atau Access Token tidak ditemukan.'
     });
   }
 
+  const cleanPhone = String(phone_number).replace(/[^0-9]/g, '');
+
   try {
-    // Kirim pesan teks ke WhatsApp Cloud API Meta
-    const metaUrl = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
+    // 3. Kirim via WhatsApp Cloud API v20.0
+    const metaUrl = `https://graph.facebook.com/v20.0/${activePhoneNumberId}/messages`;
     const metaResponse = await fetch(metaUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${activeAccessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -67,12 +63,12 @@ export default async function handler(req, res) {
     const metaData = await metaResponse.json();
 
     if (!metaResponse.ok) {
-      throw new Error(metaData.error?.message || 'Gagal mengirim pesan via WhatsApp Cloud API');
+      throw new Error(metaData.error?.message || 'Gagal mengirim pesan via Meta Cloud API');
     }
 
     const waMessageId = metaData.messages?.[0]?.id;
 
-    // Catat riwayat pesan keluar (outbound) ke tabel messages Supabase
+    // 4. Catat pesan keluar ke Supabase
     const { data: dbData, error: dbError } = await supabase
       .from('messages')
       .insert({
@@ -87,18 +83,16 @@ export default async function handler(req, res) {
       .single();
 
     if (dbError) {
-      console.warn('Gagal menyimpan pesan ke Supabase:', dbError.message);
-      // Pesan tetap sukses terkirim ke WhatsApp, beri info ke client
       return res.status(200).json({
         status: 'partial_success',
-        message: 'Pesan terkirim ke WhatsApp tetapi gagal tercatat di database.',
+        message: 'Pesan terkirim ke WA tetapi gagal dicatat di database.',
         error: dbError.message
       });
     }
 
     return res.status(200).json({
       status: 'success',
-      message: 'Pesan berhasil terkirim ke WhatsApp dan tersimpan di database.',
+      message: 'Pesan terkirim via nomor aktif!',
       data: dbData
     });
 

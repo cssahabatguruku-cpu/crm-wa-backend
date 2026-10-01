@@ -43,11 +43,11 @@ const DEFAULT_CHANNELS = [
   },
   {
     id: 'ch-2',
-    name: 'Sahabat Guru (Mandiri Baru)',
-    phone_number: '6281234567890',
-    waba_id: 'ISIKAN_WABA_ID_BARU',
-    phone_number_id: 'ISIKAN_PHONE_ID_BARU',
-    access_token: 'ISIKAN_TOKEN_BARU',
+    name: 'STA Pro (Coexistence HP)',
+    phone_number: '6289687596305',
+    waba_id: '151945925902026',
+    phone_number_id: '723025274227782',
+    access_token: '',
     is_active: true,
   },
 ];
@@ -281,6 +281,7 @@ export default function App() {
           contact_id: selectedContact.id,
           message_text: content,
           phone_number_id: activeChannel?.phone_number_id,
+          access_token: activeChannel?.access_token, // Kirim Token Dinamis dari Channel Aktif
           waba_id: activeChannel?.waba_id,
         }),
       });
@@ -389,7 +390,6 @@ export default function App() {
             ⚙️
           </button>
 
-          {/* Tombol Pusat Bantuan & Panduan */}
           <button
             title="Pusat Bantuan & Panduan Sistem"
             onClick={() => setCurrentView('help')}
@@ -398,12 +398,12 @@ export default function App() {
               (currentView === 'help' ? 'text-emerald-400 bg-slate-800 shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800')
             }
           >
-            📖
+            ❓
           </button>
         </div>
       </div>
 
-      {/* MAIN VIEW ROUTING: CHAT | CONTACTS | BROADCAST | TEMPLATES | SETTINGS | HELP */}
+      {/* MAIN VIEW ROUTING */}
       {currentView === 'help' ? (
         <HelpPage onNavigateSettings={() => setCurrentView('settings')} />
       ) : currentView === 'settings' ? (
@@ -659,7 +659,7 @@ export default function App() {
                   (currentView === 'help' ? 'text-emerald-600 font-bold' : 'text-slate-600')
                 }
               >
-                <span className="text-sm leading-none">📖</span>
+                <span className="text-sm leading-none">❓</span>
                 <span className="text-[10px] font-medium">Bantuan</span>
               </button>
             </div>
@@ -943,7 +943,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal Buku Kontak Legacy */}
+      {/* Modal Buku Kontak */}
       <ContactModal
         isOpen={showContactModal}
         onClose={() => setShowContactModal(false)}
@@ -959,7 +959,7 @@ export default function App() {
         supabaseKey={DEFAULT_SUPABASE_ANON_KEY}
       />
 
-      {/* Modal Template Meta Legacy */}
+      {/* Modal Template Meta */}
       <TemplateModal
         isOpen={showTemplateModal}
         onClose={() => setShowTemplateModal(false)}
