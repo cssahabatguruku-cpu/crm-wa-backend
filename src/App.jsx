@@ -33,12 +33,11 @@ const supabase = createClient(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY);
 const DEFAULT_CHANNELS = [
   {
     id: 'ch-1',
-    name: 'Sahabat Guru (Lama/Barantum)',
+    name: 'Sahabat Guru (Utama/Lama)',
     phone_number: '6282322726989',
     waba_id: '163200896887310',
     phone_number_id: '4326818007572416',
-    access_token:
-      'EAAZBLhjrRT18BSoHItgxuRkvZAVg9XXylyw0BZBQcdWBuZCJlOfuHoo69lbVjh5TKiNZA62dSMl411wSggNytzpWwcM0oCjXc410AZBhsKRowuyqnZBWT6vcncEBwgDgZAgF7sriDJocBiBH5VAlKqkA3gtkNGnLCdzN4vyjgvhPrSGIdcwJXTCGZCd1hFMOR8JFJIAZDZD',
+    access_token: '', // Kosongkan agar backend otomatis fallback memakai WA_PERMANENT_TOKEN Vercel yang valid
     is_active: true,
   },
   {
@@ -47,7 +46,8 @@ const DEFAULT_CHANNELS = [
     phone_number: '6289687596305',
     waba_id: '151945925902026',
     phone_number_id: '723025274227782',
-    access_token: '',
+    access_token:
+      'EAAZBLhjrRT18BSpmPu4lAqscFOtH6zNU02h0bm71y4tIWm4XkRWZAZBjbe5LVo2gkH2z1mBF1AC47QRBbEte6oFDIHhwOOcsYhGS6nEZBxYcUzHGLZBdWjn8w8PUTJa5aETcumZBXB4wkqpBrllwmZCvTHvl9i7vXaSfrrOlmhAVD5w61Lnh621uVRU6WmQZBB2ENQZDZD',
     is_active: true,
   },
 ];

@@ -21,7 +21,6 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 1. Tangkap parameter dinamis dari Frontend
   const { phone_number, message_text, contact_id, phone_number_id, access_token } = req.body || {};
 
   if (!phone_number || !message_text || !contact_id) {
@@ -30,9 +29,11 @@ export default async function handler(req, res) {
     });
   }
 
-  // 2. Gunakan Phone ID & Token dari Channel yang dipilih di CRM (Fallback ke .env jika kosong)
+  // Jika access_token dari frontend kosong/spaces, baru fallback ke WA_PERMANENT_TOKEN Vercel
   const activePhoneNumberId = phone_number_id || process.env.WA_PHONE_NUMBER_ID;
-  const activeAccessToken = access_token || process.env.WA_PERMANENT_TOKEN;
+  const activeAccessToken = (access_token && access_token.trim() !== '') 
+    ? access_token.trim() 
+    : process.env.WA_PERMANENT_TOKEN;
 
   if (!activePhoneNumberId || !activeAccessToken) {
     return res.status(500).json({
@@ -43,7 +44,6 @@ export default async function handler(req, res) {
   const cleanPhone = String(phone_number).replace(/[^0-9]/g, '');
 
   try {
-    // 3. Kirim via WhatsApp Cloud API v20.0
     const metaUrl = `https://graph.facebook.com/v20.0/${activePhoneNumberId}/messages`;
     const metaResponse = await fetch(metaUrl, {
       method: 'POST',
@@ -68,7 +68,6 @@ export default async function handler(req, res) {
 
     const waMessageId = metaData.messages?.[0]?.id;
 
-    // 4. Catat pesan keluar ke Supabase
     const { data: dbData, error: dbError } = await supabase
       .from('messages')
       .insert({
